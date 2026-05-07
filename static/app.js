@@ -1,5 +1,5 @@
 /**
- * Friday AI v3 - Optimized Frontend
+ * Friday AI v3 - Claude/ChatGPT Style UI
  */
 
 class FridayAI {
@@ -7,6 +7,7 @@ class FridayAI {
         this.messages = [];
         this.agents = [];
         this.isLoading = false;
+        this.currentPath = null;
         this.init();
     }
 
@@ -17,7 +18,8 @@ class FridayAI {
             this.render();
             
             setTimeout(() => {
-                document.querySelector('.loading-screen').style.display = 'none';
+                const loading = document.querySelector('.loading-screen');
+                if (loading) loading.style.display = 'none';
             }, 300);
         } catch (error) {
             console.error('Init error:', error);
@@ -60,14 +62,12 @@ class FridayAI {
         input.value = '';
 
         try {
-            // Add user message
             this.messages.push({
                 role: 'user',
                 message: text
             });
             this.renderMessages();
 
-            // Send to server
             const response = await fetch('/api/chat', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -76,7 +76,6 @@ class FridayAI {
 
             const data = await response.json();
 
-            // Add assistant response
             this.messages.push({
                 role: 'assistant',
                 message: data.response || 'No response'
@@ -113,18 +112,75 @@ class FridayAI {
         }
     }
 
+    async listFiles(path = null) {
+        try {
+            const url = path ? `/api/files?path=${encodeURIComponent(path)}` : '/api/files';
+            const response = await fetch(url);
+            const data = await response.json();
+            
+            if (data.path) {
+                this.currentPath = data.path;
+                this.renderFileExplorer(data);
+            }
+        } catch (error) {
+            console.error('List files error:', error);
+        }
+    }
+
+    async readFile(path) {
+        try {
+            const response = await fetch('/api/files/read', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ path })
+            });
+            const data = await response.json();
+            
+            if (data.content) {
+                this.messages.push({
+                    role: 'assistant',
+                    message: `File: ${path}\n\n${data.content.substring(0, 500)}...`
+                });
+                this.renderMessages();
+            }
+        } catch (error) {
+            console.error('Read file error:', error);
+        }
+    }
+
     renderMessages() {
         const container = document.querySelector('.chat-messages');
         if (!container) return;
 
         container.innerHTML = this.messages.map(msg => `
             <div class="message ${msg.role}">
-                <div class="message-label">${msg.role}</div>
-                <div class="message-content">${this.escapeHtml(msg.message)}</div>
+                <div class="message-wrapper">
+                    <div class="message-label">${msg.role}</div>
+                    <div class="message-content">${this.escapeHtml(msg.message)}</div>
+                </div>
             </div>
         `).join('');
 
         container.scrollTop = container.scrollHeight;
+    }
+
+    renderFileExplorer(data) {
+        const explorer = document.querySelector('.file-explorer');
+        if (!explorer) return;
+
+        explorer.innerHTML = `
+            <div style="padding: 12px; font-size: 12px; color: var(--text-secondary);">
+                ${data.path}
+            </div>
+            <div style="padding: 12px; max-height: 300px; overflow-y: auto;">
+                ${data.items.map(item => `
+                    <div style="padding: 6px; cursor: pointer; border-radius: 4px; margin-bottom: 4px; background: var(--bg-tertiary);"
+                         onclick="app.${item.type === 'dir' ? 'listFiles' : 'readFile'}('${item.path}')">
+                        ${item.type === 'dir' ? '📁' : '📄'} ${item.name}
+                    </div>
+                `).join('')}
+            </div>
+        `;
     }
 
     render() {
@@ -145,16 +201,22 @@ class FridayAI {
                             `).join('')}
                         </div>
                     </div>
+
+                    <div class="sidebar-section">
+                        <div class="sidebar-title">📁 Files</div>
+                        <button onclick="app.listFiles()" style="width: 100%; padding: 8px; background: var(--bg-tertiary); border: 1px solid var(--border); border-radius: 4px; color: var(--text); cursor: pointer; font-size: 12px;">
+                            Browse Files
+                        </button>
+                        <div class="file-explorer" style="margin-top: 8px;"></div>
+                    </div>
                 </div>
 
                 <div class="content">
                     <div class="header">
-                        <div class="header-title">F.R.I.D.A.Y</div>
+                        <div class="header-title">Friday AI</div>
                         <div class="header-status">
-                            <div class="status-item">
-                                <div class="status-indicator"></div>
-                                <span>ONLINE</span>
-                            </div>
+                            <div class="status-indicator"></div>
+                            <span>ONLINE</span>
                         </div>
                     </div>
 
@@ -165,7 +227,7 @@ class FridayAI {
                             <div class="input-container">
                                 <textarea 
                                     class="input-field" 
-                                    placeholder="Ask Friday anything..."
+                                    placeholder="Message Friday..."
                                     rows="1"
                                     onkeypress="if(event.key==='Enter' && !event.shiftKey) { event.preventDefault(); app.sendMessage(this.value); }">
                                 </textarea>

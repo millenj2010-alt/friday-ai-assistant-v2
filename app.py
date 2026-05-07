@@ -1,13 +1,14 @@
 """
-Friday AI v3 - Optimized Backend
-Fast, efficient AI assistant with Ollama
+Friday AI v3 - Advanced with File Access
 """
 
 import os
 import sqlite3
 import threading
 import time
+import json
 from datetime import datetime
+from pathlib import Path
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 import requests
@@ -18,18 +19,15 @@ logging.basicConfig(level=logging.WARNING)
 logger = logging.getLogger(__name__)
 
 app = Flask(__name__, static_folder='static', static_url_path='')
-CORS(app, resources={r"/api/*": {"origins": "*"}})
+CORS(app)
 
-# Config
 OLLAMA_URL = os.getenv('OLLAMA_API_URL', 'http://localhost:11434')
 OLLAMA_MODEL = os.getenv('OLLAMA_MODEL', 'mistral')
 DB_PATH = 'friday_ai.db'
 
-# Connection pool
 _db_conn = None
 
 def get_db():
-    """Get database connection"""
     global _db_conn
     if _db_conn is None:
         _db_conn = sqlite3.connect(DB_PATH, check_same_thread=False)
@@ -37,7 +35,6 @@ def get_db():
     return _db_conn
 
 def init_db():
-    """Initialize database"""
     conn = get_db()
     c = conn.cursor()
     
@@ -62,21 +59,18 @@ def init_db():
         last_run DATETIME
     )''')
     
-    # Create indexes for faster queries
     c.execute('CREATE INDEX IF NOT EXISTS idx_chat_role ON chat_history(role)')
     c.execute('CREATE INDEX IF NOT EXISTS idx_knowledge_source ON knowledge_base(source)')
     
     conn.commit()
 
 def save_chat(role, message):
-    """Save chat - optimized"""
     conn = get_db()
     c = conn.cursor()
     c.execute('INSERT INTO chat_history (role, message) VALUES (?, ?)', (role, message))
     conn.commit()
 
 def get_chat_history(limit=20):
-    """Get chat history - optimized"""
     conn = get_db()
     c = conn.cursor()
     c.execute('SELECT role, message FROM chat_history ORDER BY id DESC LIMIT ?', (limit,))
@@ -84,7 +78,6 @@ def get_chat_history(limit=20):
     return list(reversed(messages))
 
 def save_knowledge(source, content, confidence=0.7):
-    """Save knowledge - optimized"""
     conn = get_db()
     c = conn.cursor()
     c.execute('INSERT INTO knowledge_base (source, content, confidence) VALUES (?, ?, ?)', 
@@ -92,14 +85,65 @@ def save_knowledge(source, content, confidence=0.7):
     conn.commit()
 
 def get_knowledge(limit=50):
-    """Get knowledge - optimized"""
     conn = get_db()
     c = conn.cursor()
     c.execute('SELECT * FROM knowledge_base ORDER BY id DESC LIMIT ?', (limit,))
     return [dict(row) for row in c.fetchall()]
 
+def list_files(path=None):
+    """List files in a directory"""
+    try:
+        if path is None:
+            path = str(Path.home())
+        
+        path = Path(path)
+        if not path.exists():
+            return {'error': 'Path does not exist'}
+        
+        if not path.is_dir():
+            return {'error': 'Not a directory'}
+        
+        items = []
+        for item in path.iterdir():
+            try:
+                items.append({
+                    'name': item.name,
+                    'path': str(item),
+                    'type': 'dir' if item.is_dir() else 'file',
+                    'size': item.stat().st_size if item.is_file() else 0
+                })
+            except:
+                pass
+        
+        return {
+            'path': str(path),
+            'items': sorted(items, key=lambda x: (x['type'] != 'dir', x['name']))
+        }
+    except Exception as e:
+        return {'error': str(e)}
+
+def read_file(path):
+    """Read file content"""
+    try:
+        path = Path(path)
+        if not path.exists():
+            return {'error': 'File does not exist'}
+        
+        if not path.is_file():
+            return {'error': 'Not a file'}
+        
+        # Limit file size to 1MB
+        if path.stat().st_size > 1024 * 1024:
+            return {'error': 'File too large (max 1MB)'}
+        
+        with open(path, 'r', encoding='utf-8', errors='ignore') as f:
+            content = f.read()
+        
+        return {'content': content, 'path': str(path)}
+    except Exception as e:
+        return {'error': str(e)}
+
 def scrape_web_fast(query):
-    """Fast web scraping"""
     try:
         headers = {'User-Agent': 'Mozilla/5.0'}
         response = requests.get(
@@ -118,7 +162,6 @@ def scrape_web_fast(query):
         pass
 
 def learning_agent_worker():
-    """Background learning agent"""
     while True:
         try:
             conn = get_db()
@@ -149,7 +192,6 @@ def index():
 
 @app.route('/api/health', methods=['GET'])
 def health():
-    """Fast health check"""
     try:
         r = requests.get(f"{OLLAMA_URL}/api/tags", timeout=2)
         return jsonify({'status': 'ok', 'ollama': 'connected' if r.status_code == 200 else 'error'}), 200
@@ -158,7 +200,6 @@ def health():
 
 @app.route('/api/chat', methods=['POST'])
 def chat():
-    """Fast chat endpoint"""
     try:
         data = request.json
         msg = data.get('message', '').strip()
@@ -168,11 +209,9 @@ def chat():
         
         save_chat('user', msg)
         
-        # Get recent context
         history = get_chat_history(limit=5)
         context = "\n".join([f"{m['role']}: {m['message'][:100]}" for m in history])
         
-        # Fast Ollama call
         try:
             r = requests.post(
                 f"{OLLAMA_URL}/api/generate",
@@ -191,12 +230,10 @@ def chat():
 
 @app.route('/api/chat/history', methods=['GET'])
 def history():
-    """Get chat history"""
     return jsonify(get_chat_history(limit=50)), 200
 
 @app.route('/api/agents', methods=['GET'])
 def agents():
-    """Get agents"""
     conn = get_db()
     c = conn.cursor()
     c.execute('SELECT * FROM agent_status')
@@ -212,7 +249,6 @@ def agents():
 
 @app.route('/api/agents/<name>/toggle', methods=['POST'])
 def toggle_agent(name):
-    """Toggle agent"""
     conn = get_db()
     c = conn.cursor()
     c.execute('SELECT is_active FROM agent_status WHERE agent_name = ?', (name,))
@@ -226,13 +262,24 @@ def toggle_agent(name):
 
 @app.route('/api/knowledge', methods=['GET'])
 def knowledge():
-    """Get knowledge"""
     return jsonify(get_knowledge(limit=100)), 200
+
+@app.route('/api/files', methods=['GET'])
+def files():
+    """List files in directory"""
+    path = request.args.get('path', None)
+    return jsonify(list_files(path)), 200
+
+@app.route('/api/files/read', methods=['POST'])
+def read():
+    """Read file content"""
+    data = request.json
+    path = data.get('path', '')
+    return jsonify(read_file(path)), 200
 
 if __name__ == '__main__':
     init_db()
     
-    # Start learning agent
     t = threading.Thread(target=learning_agent_worker, daemon=True)
     t.start()
     
