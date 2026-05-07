@@ -87,12 +87,15 @@ class FridayAI {
         }
     }
 
-    async sendMessage(text, deepthink = false) {
+    async sendMessage(text, deepthink = false, useExternalAI = false) {
         if (!text.trim() || this.isLoading) return;
 
         this.isLoading = true;
         const input = document.querySelector('.input-field');
         input.value = '';
+        
+        // Update brain activity
+        this.updateBrainActivity();
 
         try {
             this.messages.push({
@@ -105,7 +108,7 @@ class FridayAI {
             const response = await fetch('/api/chat', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ message: text, deepthink: deepthink })
+                body: JSON.stringify({ message: text, deepthink: deepthink, use_external_ai: useExternalAI })
             });
 
             const data = await response.json();
@@ -241,48 +244,30 @@ class FridayAI {
     }
 
     startBrainAnimation() {
-        const canvas = document.getElementById('brain-canvas');
-        if (!canvas) return;
+        if (typeof BrainVisualization !== 'undefined') {
+            this.brain = new BrainVisualization('brain-canvas');
+        }
+    }
 
-        const ctx = canvas.getContext('2d');
-        const w = canvas.width;
-        const h = canvas.height;
-        let time = 0;
-
-        const animate = () => {
-            ctx.fillStyle = 'rgba(13, 13, 13, 0.1)';
-            ctx.fillRect(0, 0, w, h);
-
-            // Draw nodes
-            const agents = this.agents || [];
-            agents.forEach((agent, i) => {
-                const angle = (i / agents.length) * Math.PI * 2;
-                const x = w / 2 + Math.cos(angle) * 60;
-                const y = h / 2 + Math.sin(angle) * 60;
-
-                ctx.fillStyle = agent.is_active ? '#10a37f' : '#404040';
-                ctx.beginPath();
-                ctx.arc(x, y, 6, 0, Math.PI * 2);
-                ctx.fill();
-
-                ctx.strokeStyle = agent.is_active ? 'rgba(16, 163, 127, 0.5)' : 'rgba(64, 64, 64, 0.3)';
-                ctx.lineWidth = 1;
-                ctx.beginPath();
-                ctx.arc(x, y, 10, 0, Math.PI * 2);
-                ctx.stroke();
-            });
-
-            // Draw center
-            ctx.fillStyle = '#a855f7';
-            ctx.beginPath();
-            ctx.arc(w / 2, h / 2, 8, 0, Math.PI * 2);
-            ctx.fill();
-
-            time += 0.01;
-            this.animationId = requestAnimationFrame(animate);
-        };
-
-        animate();
+    updateBrainActivity() {
+        if (!this.brain) return;
+        
+        // Update agent activity
+        this.agents.forEach((agent, i) => {
+            if (agent.is_active) {
+                this.brain.setNodeActivity(i + 1, 0.7);
+            }
+        });
+        
+        // Add random pulses for activity
+        if (Math.random() > 0.7) {
+            const from = Math.floor(Math.random() * this.agents.length) + 1;
+            const to = Math.floor(Math.random() * this.agents.length) + 1;
+            if (from !== to) {
+                this.brain.addPulse(0, from);
+                this.brain.addPulse(from, to);
+            }
+        }
     }
 
     render() {
@@ -376,6 +361,13 @@ class FridayAI {
                                     onclick="app.sendMessage(document.querySelector('.input-field').value, true)" 
                                     title="DeepThink Mode">
                                     🧠
+                                </button>
+                                <button 
+                                    class="send-button" 
+                                    style="background: #0ea5e9; margin-left: 4px;"
+                                    onclick="app.sendMessage(document.querySelector('.input-field').value, false, true)" 
+                                    title="Use Advanced AI (OpenAI)">
+                                    ⚡
                                 </button>
                             </div>
                         </div>

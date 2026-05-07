@@ -15,6 +15,7 @@ import requests
 from bs4 import BeautifulSoup
 import logging
 import random
+from openai import OpenAI
 
 logging.basicConfig(level=logging.WARNING)
 logger = logging.getLogger(__name__)
@@ -24,7 +25,13 @@ CORS(app)
 
 OLLAMA_URL = os.getenv('OLLAMA_API_URL', 'http://localhost:11434')
 OLLAMA_MODEL = os.getenv('OLLAMA_MODEL', 'mistral')
+OPENAI_API_KEY = os.getenv('OPENAI_API_KEY', '')
 DB_PATH = 'friday_ai.db'
+
+# Initialize OpenAI client if API key is available
+openai_client = None
+if OPENAI_API_KEY:
+    openai_client = OpenAI(api_key=OPENAI_API_KEY)
 
 _db_conn = None
 
@@ -282,6 +289,7 @@ def chat():
         data = request.json
         msg = data.get('message', '').strip()
         deepthink = data.get('deepthink', False)
+        use_external_ai = data.get('use_external_ai', False)
         
         if not msg:
             return jsonify({'error': 'No message'}), 400
@@ -291,27 +299,46 @@ def chat():
         history = get_chat_history(limit=5)
         context = "\n".join([f"{m['role']}: {m['message'][:100]}" for m in history])
         
-        # DeepThink mode - longer thinking
-        if deepthink:
-            prompt = f"""You are Friday AI, an advanced assistant that can code and improve itself.
+        # Use external AI (OpenAI) for coding tasks
+        if use_external_ai and openai_client:
+            try:
+                response_obj = openai_client.chat.completions.create(
+                    model="gpt-4",
+                    messages=[
+                        {"role": "system", "content": "You are Friday AI, an advanced assistant that can code and improve itself. Provide high-quality code and solutions."},
+                        {"role": "user", "content": msg}
+                    ],
+                    temperature=0.7
+                )
+                response = response_obj.choices[0].message.content
+                log_agent_activity('deepthink_agent', 'external_ai_call', 'Used OpenAI GPT-4')
+            except Exception as e:
+                response = f"External AI error: {str(e)}. Falling back to Ollama."
+                use_external_ai = False
+        
+        # Fall back to Ollama
+        if not use_external_ai or not openai_client:
+            # DeepThink mode - longer thinking
+            if deepthink:
+                prompt = f"""You are Friday AI, an advanced assistant that can code and improve itself.
 {context}
 
 Think deeply about this request. If it involves coding, provide Python code that can improve Friday AI or modify files.
 Provide a comprehensive response with code if needed.
 
 Assistant:"""
-        else:
-            prompt = f"{context}\nAssistant:"
-        
-        try:
-            r = requests.post(
-                f"{OLLAMA_URL}/api/generate",
-                json={"model": OLLAMA_MODEL, "prompt": prompt, "stream": False},
-                timeout=60 if deepthink else 30
-            )
-            response = r.json().get('response', 'No response').strip() if r.status_code == 200 else "Error"
-        except:
-            response = "Ollama timeout"
+            else:
+                prompt = f"{context}\nAssistant:"
+            
+            try:
+                r = requests.post(
+                    f"{OLLAMA_URL}/api/generate",
+                    json={"model": OLLAMA_MODEL, "prompt": prompt, "stream": False},
+                    timeout=60 if deepthink else 30
+                )
+                response = r.json().get('response', 'No response').strip() if r.status_code == 200 else "Error"
+            except:
+                response = "Ollama timeout"
         
         save_chat('assistant', response)
         
