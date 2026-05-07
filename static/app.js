@@ -87,7 +87,7 @@ class FridayAI {
         }
     }
 
-    async sendMessage(text) {
+    async sendMessage(text, deepthink = false) {
         if (!text.trim() || this.isLoading) return;
 
         this.isLoading = true;
@@ -105,7 +105,7 @@ class FridayAI {
             const response = await fetch('/api/chat', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ message: text })
+                body: JSON.stringify({ message: text, deepthink: deepthink })
             });
 
             const data = await response.json();
@@ -183,6 +183,28 @@ class FridayAI {
             }
         } catch (error) {
             console.error('Read file error:', error);
+        }
+    }
+
+    async writeFile(path, content) {
+        try {
+            const response = await fetch('/api/files/write', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ path, content })
+            });
+            const data = await response.json();
+            
+            if (data.success) {
+                this.messages.push({
+                    role: 'assistant',
+                    message: `✅ File written: ${path}`,
+                    timestamp: new Date().toISOString()
+                });
+                this.renderMessages();
+            }
+        } catch (error) {
+            console.error('Write file error:', error);
         }
     }
 
@@ -347,6 +369,13 @@ class FridayAI {
                                     class="send-button"
                                     onclick="app.sendMessage(document.querySelector('.input-field').value)">
                                     Send
+                                </button>
+                                <button 
+                                    class="send-button" 
+                                    style="background: #a855f7; margin-left: 4px;"
+                                    onclick="app.sendMessage(document.querySelector('.input-field').value, true)" 
+                                    title="DeepThink Mode">
+                                    🧠
                                 </button>
                             </div>
                         </div>

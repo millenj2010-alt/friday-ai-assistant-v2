@@ -281,6 +281,7 @@ def chat():
     try:
         data = request.json
         msg = data.get('message', '').strip()
+        deepthink = data.get('deepthink', False)
         
         if not msg:
             return jsonify({'error': 'No message'}), 400
@@ -290,17 +291,32 @@ def chat():
         history = get_chat_history(limit=5)
         context = "\n".join([f"{m['role']}: {m['message'][:100]}" for m in history])
         
+        # DeepThink mode - longer thinking
+        if deepthink:
+            prompt = f"""You are Friday AI, an advanced assistant that can code and improve itself.
+{context}
+
+Think deeply about this request. If it involves coding, provide Python code that can improve Friday AI or modify files.
+Provide a comprehensive response with code if needed.
+
+Assistant:"""
+        else:
+            prompt = f"{context}\nAssistant:"
+        
         try:
             r = requests.post(
                 f"{OLLAMA_URL}/api/generate",
-                json={"model": OLLAMA_MODEL, "prompt": f"{context}\nAssistant:", "stream": False},
-                timeout=30
+                json={"model": OLLAMA_MODEL, "prompt": prompt, "stream": False},
+                timeout=60 if deepthink else 30
             )
             response = r.json().get('response', 'No response').strip() if r.status_code == 200 else "Error"
         except:
             response = "Ollama timeout"
         
         save_chat('assistant', response)
+        
+        if deepthink:
+            log_agent_activity('deepthink_agent', 'deep_thinking', 'Processed complex request')
         
         return jsonify({'response': response}), 200
     except Exception as e:
@@ -318,11 +334,11 @@ def agents():
     agents = [dict(row) for row in c.fetchall()]
     
     if not agents:
-        for a in ['learning_agent', 'research_agent', 'memory_agent', 'web_search_agent']:
+        for a in ['learning_agent', 'research_agent', 'memory_agent', 'web_search_agent', 'deepthink_agent']:
             c.execute('INSERT OR IGNORE INTO agent_status (agent_name, is_active, status) VALUES (?, ?, ?)', 
                      (a, 0, 'idle'))
         conn.commit()
-        agents = [{'agent_name': a, 'is_active': 0, 'status': 'idle'} for a in ['learning_agent', 'research_agent', 'memory_agent', 'web_search_agent']]
+        agents = [{'agent_name': a, 'is_active': 0, 'status': 'idle'} for a in ['learning_agent', 'research_agent', 'memory_agent', 'web_search_agent', 'deepthink_agent']]
     
     return jsonify(agents), 200
 
@@ -365,6 +381,28 @@ def read():
     data = request.json
     path = data.get('path', '')
     return jsonify(read_file(path)), 200
+
+@app.route('/api/files/write', methods=['POST'])
+def write():
+    """Write to file"""
+    try:
+        data = request.json
+        path = data.get('path', '')
+        content = data.get('content', '')
+        
+        path = Path(path)
+        if not path.parent.exists():
+            return {'error': 'Parent directory does not exist'}, 400
+        
+        with open(path, 'w', encoding='utf-8') as f:
+            f.write(content)
+        
+        save_knowledge(str(path), f'Modified file: {path.name}', 0.8)
+        log_agent_activity('deepthink_agent', 'file_write', f'Wrote to {path.name}')
+        
+        return jsonify({'success': True, 'path': str(path)}), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 if __name__ == '__main__':
     init_db()
