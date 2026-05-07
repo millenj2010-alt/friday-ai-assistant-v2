@@ -3,18 +3,23 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Friday AI v3 - Advanced Distributed AI Assistant</title>
+    <title>Friday AI - Advanced AI Assistant</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/style.css">
 </head>
 <body>
-    <div id="root">
-        <div style="display: flex; align-items: center; justify-content: center; width: 100%; height: 100%; color: #a855f7; font-size: 24px;">
-            Loading Friday AI...
+    <div id="app" class="app-container">
+        <!-- Loading state -->
+        <div class="loading-screen">
+            <div class="loading-content">
+                <div class="friday-logo">F.R.I.D.A.Y</div>
+                <div class="loading-text">Initializing AI Assistant...</div>
+            </div>
         </div>
     </div>
+
     <script src="/app.js"></script>
 </body>
 </html>
