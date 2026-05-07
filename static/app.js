@@ -1,34 +1,24 @@
 /**
- * Friday AI v3 - Frontend Application
- * Advanced AI Assistant with Chat and Learning Agents
+ * Friday AI v3 - Optimized Frontend
  */
 
 class FridayAI {
     constructor() {
         this.messages = [];
         this.agents = [];
-        this.knowledge = [];
         this.isLoading = false;
         this.init();
     }
 
     async init() {
-        console.log('Initializing Friday AI...');
-        
         try {
-            // Check health
             await this.checkHealth();
-            
-            // Load agents
             await this.loadAgents();
-            
-            // Render UI
             this.render();
             
-            // Hide loading screen
             setTimeout(() => {
                 document.querySelector('.loading-screen').style.display = 'none';
-            }, 500);
+            }, 300);
         } catch (error) {
             console.error('Init error:', error);
         }
@@ -37,9 +27,7 @@ class FridayAI {
     async checkHealth() {
         try {
             const response = await fetch('/api/health');
-            const data = await response.json();
-            console.log('Health:', data);
-            return data;
+            return await response.json();
         } catch (error) {
             console.error('Health check failed:', error);
         }
@@ -49,7 +37,6 @@ class FridayAI {
         try {
             const response = await fetch('/api/agents');
             this.agents = await response.json();
-            console.log('Agents loaded:', this.agents);
         } catch (error) {
             console.error('Failed to load agents:', error);
         }
@@ -57,7 +44,7 @@ class FridayAI {
 
     async loadChatHistory() {
         try {
-            const response = await fetch('/api/chat/history?limit=50');
+            const response = await fetch('/api/chat/history');
             this.messages = await response.json();
             this.renderMessages();
         } catch (error) {
@@ -65,26 +52,18 @@ class FridayAI {
         }
     }
 
-    async loadKnowledge() {
-        try {
-            const response = await fetch('/api/knowledge?limit=100');
-            this.knowledge = await response.json();
-        } catch (error) {
-            console.error('Failed to load knowledge:', error);
-        }
-    }
-
     async sendMessage(text) {
         if (!text.trim() || this.isLoading) return;
 
         this.isLoading = true;
+        const input = document.querySelector('.input-field');
+        input.value = '';
 
         try {
-            // Add user message to UI
+            // Add user message
             this.messages.push({
                 role: 'user',
-                message: text,
-                timestamp: new Date().toISOString()
+                message: text
             });
             this.renderMessages();
 
@@ -100,21 +79,19 @@ class FridayAI {
             // Add assistant response
             this.messages.push({
                 role: 'assistant',
-                message: data.response,
-                timestamp: new Date().toISOString()
+                message: data.response || 'No response'
             });
 
             this.renderMessages();
         } catch (error) {
-            console.error('Chat error:', error);
             this.messages.push({
                 role: 'assistant',
-                message: `Error: ${error.message}`,
-                timestamp: new Date().toISOString()
+                message: `Error: ${error.message}`
             });
             this.renderMessages();
         } finally {
             this.isLoading = false;
+            input.focus();
         }
     }
 
@@ -125,7 +102,6 @@ class FridayAI {
             });
             const data = await response.json();
             
-            // Update local state
             const agent = this.agents.find(a => a.agent_name === agentName);
             if (agent) {
                 agent.is_active = data.is_active;
@@ -148,7 +124,6 @@ class FridayAI {
             </div>
         `).join('');
 
-        // Scroll to bottom
         container.scrollTop = container.scrollHeight;
     }
 
@@ -157,34 +132,22 @@ class FridayAI {
         
         app.innerHTML = `
             <div class="main-layout">
-                <!-- Sidebar -->
                 <div class="sidebar">
-                    <!-- Agents Section -->
                     <div class="sidebar-section">
                         <div class="sidebar-title">🤖 Agents</div>
                         <div class="agent-list">
                             ${this.agents.map(agent => `
                                 <div class="agent-item ${agent.is_active ? 'active' : ''}" 
                                      onclick="app.toggleAgent('${agent.agent_name}')">
-                                    <div class="agent-name">${agent.agent_name}</div>
+                                    <div>${agent.agent_name}</div>
                                     <div class="agent-toggle">${agent.is_active ? '✓' : ''}</div>
                                 </div>
                             `).join('')}
                         </div>
                     </div>
-
-                    <!-- Knowledge Section -->
-                    <div class="sidebar-section">
-                        <div class="sidebar-title">💾 Knowledge Base</div>
-                        <div style="font-size: 12px; color: var(--text-secondary);">
-                            ${this.knowledge.length} items learned
-                        </div>
-                    </div>
                 </div>
 
-                <!-- Main Content -->
                 <div class="content">
-                    <!-- Header -->
                     <div class="header">
                         <div class="header-title">F.R.I.D.A.Y</div>
                         <div class="header-status">
@@ -195,22 +158,20 @@ class FridayAI {
                         </div>
                     </div>
 
-                    <!-- Chat Container -->
                     <div class="chat-container">
                         <div class="chat-messages"></div>
                         
-                        <!-- Chat Input -->
                         <div class="chat-input-area">
                             <div class="input-container">
                                 <textarea 
                                     class="input-field" 
                                     placeholder="Ask Friday anything..."
                                     rows="1"
-                                    onkeypress="if(event.key==='Enter' && !event.shiftKey) { app.sendMessage(this.value); this.value=''; }">
+                                    onkeypress="if(event.key==='Enter' && !event.shiftKey) { event.preventDefault(); app.sendMessage(this.value); }">
                                 </textarea>
                                 <button 
                                     class="send-button"
-                                    onclick="const input = document.querySelector('.input-field'); app.sendMessage(input.value); input.value=''; input.focus();">
+                                    onclick="app.sendMessage(document.querySelector('.input-field').value)">
                                     Send
                                 </button>
                             </div>
@@ -220,9 +181,7 @@ class FridayAI {
             </div>
         `;
 
-        // Load chat history
         this.loadChatHistory();
-        this.loadKnowledge();
     }
 
     escapeHtml(text) {
@@ -237,7 +196,6 @@ class FridayAI {
     }
 }
 
-// Initialize app when DOM is ready
 document.addEventListener('DOMContentLoaded', () => {
     window.app = new FridayAI();
 });
