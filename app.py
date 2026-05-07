@@ -31,7 +31,11 @@ DB_PATH = 'friday_ai.db'
 # Initialize OpenAI client if API key is available
 openai_client = None
 if OPENAI_API_KEY:
-    openai_client = OpenAI(api_key=OPENAI_API_KEY)
+    try:
+        openai_client = OpenAI(api_key=OPENAI_API_KEY)
+    except Exception as e:
+        logger.warning(f"Failed to initialize OpenAI client: {e}")
+        openai_client = None
 
 _db_conn = None
 
