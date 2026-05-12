@@ -1,26 +1,773 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Friday AI - Advanced AI Assistant</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="/style.css">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>F.R.I.D.A.Y v4</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --bg: #0a0500;
+  --bg2: #0f0700;
+  --bg3: #160c00;
+  --orange: #ff6a00;
+  --orange2: #ff4500;
+  --orange-dim: #ff6a0033;
+  --orange-mid: #ff6a0077;
+  --text: #fff3e0;
+  --text-dim: #ff6a0088;
+  --border: #ff6a0022;
+}
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  background: var(--bg); color: var(--text);
+  height: 100vh; overflow: hidden; display: flex; flex-direction: column;
+}
+
+/* ── LOGIN ── */
+#login-screen {
+  display: flex; align-items: center; justify-content: center;
+  height: 100vh;
+  background: radial-gradient(ellipse at 50% 40%, #1a0800 0%, #000 70%);
+}
+.login-card {
+  width: 380px; padding: 48px 40px; text-align: center;
+  background: var(--bg2); border: 1px solid var(--border);
+  border-radius: 16px; box-shadow: 0 0 80px #ff6a0015;
+}
+.login-logo { font-size: 2.6rem; font-weight: 900; letter-spacing: 8px; color: var(--orange); text-shadow: 0 0 40px #ff6a00aa; font-family: 'Courier New', monospace; }
+.login-sub { font-size: 0.55rem; color: var(--text-dim); letter-spacing: 2px; margin: 6px 0 32px; font-family: 'Courier New', monospace; }
+.login-card input {
+  width: 100%; background: var(--bg3); border: 1px solid var(--border);
+  border-radius: 10px; color: var(--text); font-size: 0.9rem;
+  padding: 12px 16px; margin-bottom: 10px; outline: none; transition: border 0.2s;
+}
+.login-card input:focus { border-color: var(--orange); }
+.login-card input::placeholder { color: var(--text-dim); }
+.login-btn {
+  width: 100%; background: var(--orange); border: none; border-radius: 10px;
+  color: #000; font-size: 0.85rem; font-weight: 700; letter-spacing: 2px;
+  padding: 13px; cursor: pointer; margin-top: 4px; transition: opacity 0.2s;
+  font-family: 'Courier New', monospace;
+}
+.login-btn:hover { opacity: 0.85; }
+#login-err { color: #ff4444; font-size: 0.75rem; margin-top: 10px; min-height: 16px; }
+
+/* ── APP ── */
+#app { display: none; height: 100vh; }
+
+/* ── LAYOUT: sidebar + main ── */
+.layout { display: flex; height: 100vh; }
+
+/* ── LEFT SIDEBAR ── */
+.sidebar {
+  width: 260px; background: var(--bg2); border-right: 1px solid var(--border);
+  display: flex; flex-direction: column; flex-shrink: 0;
+}
+.sidebar-header {
+  padding: 16px; border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; justify-content: space-between;
+}
+.sidebar-logo { font-size: 1rem; font-weight: 900; letter-spacing: 4px; color: var(--orange); text-shadow: 0 0 12px #ff6a0066; font-family: 'Courier New', monospace; }
+.online-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--orange); box-shadow: 0 0 8px var(--orange); animation: blink 2s infinite; }
+@keyframes blink { 0%,100%{opacity:1;} 50%{opacity:0.3;} }
+.sidebar-nav { display: flex; flex-direction: column; padding: 8px; gap: 2px; }
+.nav-btn {
+  display: flex; align-items: center; gap: 10px; padding: 10px 12px;
+  border-radius: 8px; cursor: pointer; font-size: 0.82rem; color: var(--text-dim);
+  transition: all 0.15s; border: none; background: none; text-align: left; width: 100%;
+}
+.nav-btn:hover { background: var(--orange-dim); color: var(--orange); }
+.nav-btn.active { background: var(--orange-dim); color: var(--orange); }
+.nav-icon { font-size: 1rem; width: 20px; text-align: center; }
+.sidebar-section { padding: 8px 16px; flex: 1; overflow-y: auto; }
+.sidebar-section::-webkit-scrollbar { width: 2px; }
+.sidebar-section::-webkit-scrollbar-thumb { background: var(--border); }
+.s-label { font-size: 0.58rem; letter-spacing: 3px; color: var(--text-dim); font-family: 'Courier New', monospace; margin: 12px 0 6px; }
+.s-item { font-size: 0.72rem; color: var(--text-dim); padding: 4px 0; border-bottom: 1px solid #ff6a0011; line-height: 1.5; }
+.s-note { font-size: 0.7rem; color: #ffcc8899; padding: 5px 8px; border-left: 2px solid var(--orange-mid); margin-bottom: 3px; background: var(--orange-dim); border-radius: 0 6px 6px 0; }
+.stat-bar-wrap { margin-bottom: 8px; }
+.stat-bar-label { font-size: 0.62rem; color: var(--text-dim); display: flex; justify-content: space-between; margin-bottom: 3px; font-family: 'Courier New', monospace; }
+.stat-bar-track { height: 3px; background: var(--border); border-radius: 2px; }
+.stat-bar-fill { height: 100%; background: var(--orange); border-radius: 2px; box-shadow: 0 0 4px var(--orange); transition: width 1s; }
+
+/* ── MAIN CONTENT ── */
+.main-content { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+
+/* ── TOP BAR ── */
+.topbar {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 10px 20px; border-bottom: 1px solid var(--border); background: var(--bg2); flex-shrink: 0;
+}
+.topbar-title { font-size: 0.85rem; font-weight: 600; color: var(--text); }
+.topbar-stats { display: flex; gap: 16px; font-size: 0.62rem; color: var(--text-dim); font-family: 'Courier New', monospace; }
+.topbar-stats span { color: var(--orange); }
+.topbar-right { display: flex; gap: 8px; }
+.tbtn {
+  background: transparent; border: 1px solid var(--border); border-radius: 6px;
+  color: var(--text-dim); font-size: 0.65rem; letter-spacing: 1px;
+  padding: 5px 12px; cursor: pointer; transition: all 0.2s; font-family: 'Courier New', monospace;
+}
+.tbtn:hover { border-color: var(--orange); color: var(--orange); }
+
+/* ── VIEWS ── */
+.view { display: none; flex: 1; overflow: hidden; flex-direction: column; }
+.view.active { display: flex; }
+
+/* ── CHAT VIEW ── */
+#messages {
+  flex: 1; overflow-y: auto; padding: 20px 0;
+  display: flex; flex-direction: column; gap: 0;
+}
+#messages::-webkit-scrollbar { width: 4px; }
+#messages::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+.msg-row { display: flex; padding: 12px 24px; gap: 14px; transition: background 0.1s; }
+.msg-row:hover { background: #ff6a0006; }
+.msg-row.user { flex-direction: row-reverse; }
+.av { width: 36px; height: 36px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 0.72rem; font-weight: 700; flex-shrink: 0; }
+.av.fr { background: var(--orange-dim); color: var(--orange); border: 1px solid var(--orange-mid); }
+.av.us { background: var(--bg3); color: var(--text-dim); border: 1px solid var(--border); }
+.msg-body { flex: 1; max-width: 760px; }
+.msg-row.user .msg-body { display: flex; flex-direction: column; align-items: flex-end; }
+.msg-name { font-size: 0.72rem; font-weight: 600; color: var(--text-dim); margin-bottom: 4px; font-family: 'Courier New', monospace; letter-spacing: 1px; }
+.msg-text { font-size: 0.9rem; line-height: 1.75; color: var(--text); white-space: pre-wrap; word-break: break-word; }
+.msg-row.user .msg-text {
+  background: var(--bg3); border: 1px solid var(--border); border-radius: 14px 2px 14px 14px;
+  padding: 10px 14px; color: #ffcc88; max-width: 560px;
+}
+.badge { font-size: 0.62rem; color: var(--orange-mid); font-family: 'Courier New', monospace; letter-spacing: 1px; padding: 3px 24px; display: block; }
+.dots { display: flex; gap: 5px; padding: 8px 0; }
+.dots span { width: 7px; height: 7px; border-radius: 50%; background: var(--orange); box-shadow: 0 0 4px var(--orange); animation: dt 1.2s infinite; }
+.dots span:nth-child(2){animation-delay:.2s;} .dots span:nth-child(3){animation-delay:.4s;}
+@keyframes dt{0%,80%,100%{opacity:.15;transform:scale(0.8);}40%{opacity:1;transform:scale(1.1);}}
+.input-area { padding: 12px 20px 16px; flex-shrink: 0; background: var(--bg2); border-top: 1px solid var(--border); }
+.input-box {
+  display: flex; align-items: flex-end; gap: 10px; background: var(--bg3);
+  border: 1px solid var(--border); border-radius: 14px; padding: 10px 14px; transition: border 0.2s;
+  max-width: 860px; margin: 0 auto;
+}
+.input-box:focus-within { border-color: var(--orange-mid); }
+#msg-input {
+  flex: 1; background: transparent; border: none; color: var(--text);
+  font-size: 0.9rem; padding: 4px; outline: none; resize: none;
+  max-height: 140px; font-family: inherit; line-height: 1.5;
+}
+#msg-input::placeholder { color: var(--text-dim); }
+#send-btn {
+  background: var(--orange); border: none; border-radius: 10px; color: #000;
+  font-size: 0.8rem; font-weight: 700; padding: 8px 18px; cursor: pointer;
+  transition: opacity 0.2s; flex-shrink: 0; font-family: 'Courier New', monospace;
+}
+#send-btn:hover { opacity: 0.85; }
+#send-btn:disabled { opacity: 0.3; cursor: default; }
+.input-hint { font-size: 0.6rem; color: var(--text-dim); text-align: center; margin-top: 6px; font-family: 'Courier New', monospace; }
+
+/* ── BRAIN VIEW ── */
+#brain-view { padding: 20px; gap: 16px; overflow-y: auto; }
+#brain-view::-webkit-scrollbar { width: 4px; }
+#brain-view::-webkit-scrollbar-thumb { background: var(--border); }
+.brain-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.brain-canvas-wrap {
+  grid-column: 1 / -1; background: var(--bg2); border: 1px solid var(--border);
+  border-radius: 14px; padding: 16px; position: relative;
+}
+.brain-canvas-title { font-size: 0.65rem; letter-spacing: 3px; color: var(--text-dim); font-family: 'Courier New', monospace; margin-bottom: 10px; }
+#brain-canvas { width: 100%; height: 280px; display: block; }
+.agent-card {
+  background: var(--bg2); border: 1px solid var(--border); border-radius: 12px;
+  padding: 14px; transition: border 0.3s;
+}
+.agent-card.active { border-color: var(--orange-mid); box-shadow: 0 0 20px var(--orange-dim); }
+.agent-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+.agent-name { font-size: 0.75rem; font-weight: 600; color: var(--text); font-family: 'Courier New', monospace; letter-spacing: 1px; }
+.agent-toggle {
+  background: var(--bg3); border: 1px solid var(--border); border-radius: 20px;
+  color: var(--text-dim); font-size: 0.6rem; padding: 3px 10px; cursor: pointer;
+  transition: all 0.2s; font-family: 'Courier New', monospace;
+}
+.agent-toggle.on { background: var(--orange-dim); border-color: var(--orange); color: var(--orange); }
+.agent-status { font-size: 0.68rem; color: var(--text-dim); margin-bottom: 6px; display: flex; align-items: center; gap: 6px; }
+.status-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--border); }
+.status-dot.active { background: var(--orange); box-shadow: 0 0 6px var(--orange); animation: blink 1s infinite; }
+.agent-log { font-size: 0.65rem; color: var(--text-dim); font-family: 'Courier New', monospace; max-height: 60px; overflow: hidden; }
+.agent-log-item { padding: 2px 0; border-bottom: 1px solid #ff6a0011; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.research-task-box { grid-column: 1 / -1; background: var(--bg2); border: 1px solid var(--border); border-radius: 12px; padding: 14px; }
+.research-task-title { font-size: 0.65rem; letter-spacing: 3px; color: var(--text-dim); font-family: 'Courier New', monospace; margin-bottom: 10px; }
+.research-input-row { display: flex; gap: 10px; }
+#research-input {
+  flex: 1; background: var(--bg3); border: 1px solid var(--border); border-radius: 8px;
+  color: var(--text); font-size: 0.85rem; padding: 10px 12px; outline: none; font-family: inherit;
+}
+#research-input:focus { border-color: var(--orange); }
+#research-input::placeholder { color: var(--text-dim); }
+.research-depth { display: flex; gap: 6px; margin-top: 8px; }
+.depth-btn {
+  background: var(--bg3); border: 1px solid var(--border); border-radius: 6px;
+  color: var(--text-dim); font-size: 0.65rem; padding: 4px 10px; cursor: pointer;
+  transition: all 0.2s; font-family: 'Courier New', monospace;
+}
+.depth-btn.selected { background: var(--orange-dim); border-color: var(--orange); color: var(--orange); }
+.research-status { margin-top: 10px; font-size: 0.72rem; color: var(--orange); font-family: 'Courier New', monospace; min-height: 18px; }
+.activity-feed { grid-column: 1 / -1; background: var(--bg2); border: 1px solid var(--border); border-radius: 12px; padding: 14px; }
+.activity-item {
+  display: flex; gap: 10px; padding: 6px 0; border-bottom: 1px solid #ff6a0011;
+  font-size: 0.7rem; align-items: center;
+}
+.activity-agent { color: var(--orange); font-family: 'Courier New', monospace; font-size: 0.65rem; min-width: 120px; }
+.activity-action { color: var(--text-dim); flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.activity-time { color: var(--text-dim); font-size: 0.6rem; font-family: 'Courier New', monospace; }
+</style>
 </head>
 <body>
-    <div id="app" class="app-container">
-        <!-- Loading state -->
-        <div class="loading-screen">
-            <div class="loading-content">
-                <div class="friday-logo">F.R.I.D.A.Y</div>
-                <div class="loading-text">Initializing AI Assistant...</div>
-            </div>
+
+<!-- LOGIN -->
+<div id="login-screen">
+  <div class="login-card">
+    <div class="login-logo">F.R.I.D.A.Y</div>
+    <div class="login-sub">FULLY REALIZED INDEPENDENT DIGITAL AUTONOMOUS YOU</div>
+    <input type="text" id="login-user" placeholder="Username"/>
+    <input type="password" id="login-pass" placeholder="Password"/>
+    <button class="login-btn" onclick="doLogin()">INITIALIZE SYSTEM</button>
+    <div id="login-err"></div>
+  </div>
+</div>
+
+<!-- APP -->
+<div id="app">
+  <div class="layout">
+    <!-- SIDEBAR -->
+    <div class="sidebar">
+      <div class="sidebar-header">
+        <div class="sidebar-logo">F.R.I.D.A.Y</div>
+        <div class="online-dot"></div>
+      </div>
+      <div class="sidebar-nav">
+        <button class="nav-btn active" onclick="switchView('chat', this)">
+          <span class="nav-icon">💬</span> Chat
+        </button>
+        <button class="nav-btn" onclick="switchView('brain', this)">
+          <span class="nav-icon">🧠</span> Brain & Agents
+        </button>
+      </div>
+      <div class="sidebar-section">
+        <div class="s-label">SYSTEM</div>
+        <div class="stat-bar-wrap">
+          <div class="stat-bar-label"><span>CPU</span><span id="cpu-v">—</span></div>
+          <div class="stat-bar-track"><div class="stat-bar-fill" id="cpu-f" style="width:0%"></div></div>
         </div>
+        <div class="stat-bar-wrap">
+          <div class="stat-bar-label"><span>RAM</span><span id="ram-v">—</span></div>
+          <div class="stat-bar-track"><div class="stat-bar-fill" id="ram-f" style="width:0%"></div></div>
+        </div>
+        <div class="stat-bar-wrap">
+          <div class="stat-bar-label"><span>KNOWLEDGE</span><span id="know-v">0</span></div>
+          <div class="stat-bar-track"><div class="stat-bar-fill" id="know-f" style="width:0%"></div></div>
+        </div>
+        <div class="s-label">NOTES</div>
+        <div id="notes-list"><div class="s-item">No notes yet</div></div>
+        <div class="s-label">MEMORY</div>
+        <div id="facts-list"><div class="s-item">No facts yet</div></div>
+        <div class="s-label">RESEARCH TOPICS</div>
+        <div id="research-list"><div class="s-item">None yet</div></div>
+      </div>
     </div>
 
-    <script src="/brain.js"></script>
-    <script src="/app.js"></script>
+    <!-- MAIN -->
+    <div class="main-content">
+      <div class="topbar">
+        <div class="topbar-title" id="view-title">Chat with FRIDAY</div>
+        <div class="topbar-stats">
+          <div>FACTS <span id="s-facts">0</span></div>
+          <div>API <span id="s-api">—</span></div>
+          <div id="s-time"></div>
+        </div>
+        <div class="topbar-right">
+          <button class="tbtn" onclick="doLogout()">LOGOUT</button>
+        </div>
+      </div>
+
+      <!-- CHAT VIEW -->
+      <div class="view active" id="chat-view">
+        <div id="messages"></div>
+        <div class="input-area">
+          <div class="input-box" style="max-width:860px;margin:0 auto;">
+            <textarea id="msg-input" rows="1" placeholder="Message FRIDAY... (try 'research black holes' or 'open youtube')"></textarea>
+            <button id="send-btn" onclick="sendMessage()">SEND</button>
+          </div>
+          <div class="input-hint">ENTER to send · SHIFT+ENTER for new line</div>
+        </div>
+      </div>
+
+      <!-- BRAIN VIEW -->
+      <div class="view" id="brain-view">
+        <div class="brain-grid">
+          <!-- Canvas -->
+          <div class="brain-canvas-wrap">
+            <div class="brain-canvas-title">NEURAL ACTIVITY — REAL-TIME AGENT INTERACTIONS</div>
+            <canvas id="brain-canvas"></canvas>
+          </div>
+
+          <!-- Research task -->
+          <div class="research-task-box">
+            <div class="research-task-title">ASSIGN RESEARCH TASK</div>
+            <div class="research-input-row">
+              <input type="text" id="research-input" placeholder="Enter topic to research deeply (e.g. quantum computing, black holes, AI)"/>
+              <button class="login-btn" style="width:auto;padding:10px 20px;font-size:0.75rem;" onclick="assignResearch()">DEPLOY</button>
+            </div>
+            <div class="research-depth">
+              <span style="font-size:0.62rem;color:var(--text-dim);align-self:center;margin-right:4px;font-family:'Courier New',monospace;">DEPTH:</span>
+              <button class="depth-btn" onclick="setDepth(1,this)">QUICK</button>
+              <button class="depth-btn selected" onclick="setDepth(2,this)">NORMAL</button>
+              <button class="depth-btn" onclick="setDepth(3,this)">DEEP DIVE</button>
+              <button class="depth-btn" onclick="setDepth(4,this)">EXHAUSTIVE</button>
+            </div>
+            <div class="research-status" id="research-status"></div>
+          </div>
+
+          <!-- Agent cards -->
+          <div id="agent-cards"></div>
+          <div id="agent-cards2"></div>
+
+          <!-- Activity feed -->
+          <div class="activity-feed">
+            <div class="brain-canvas-title">AGENT ACTIVITY FEED</div>
+            <div id="activity-feed"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+let currentUser = null;
+let currentView = 'chat';
+let researchDepth = 2;
+let brainNodes = [];
+let brainParticles = [];
+let animFrame = null;
+
+// ── AUTO RESIZE INPUT ──
+const inp = document.getElementById("msg-input");
+inp.addEventListener("input", () => {
+  inp.style.height = "auto";
+  inp.style.height = Math.min(inp.scrollHeight, 140) + "px";
+});
+inp.addEventListener("keydown", e => {
+  if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(); }
+});
+document.getElementById("login-pass").addEventListener("keydown", e => {
+  if (e.key === "Enter") doLogin();
+});
+
+// ── LOGIN ──
+async function doLogin() {
+  const u = document.getElementById("login-user").value.trim();
+  const p = document.getElementById("login-pass").value;
+  const err = document.getElementById("login-err");
+  err.textContent = "Authenticating...";
+  try {
+    const res  = await fetch("/api/login", {method:"POST",headers:{"Content-Type":"application/json"},credentials:"include",body:JSON.stringify({username:u,password:p})});
+    const data = await res.json();
+    if (data.success) {
+      currentUser = data.username;
+      document.getElementById("login-screen").style.display = "none";
+      document.getElementById("app").style.display = "block";
+      addMsg("friday", "FRIDAY", data.message);
+      loadMemory(); startStats(); loadAgents();
+      initBrainCanvas();
+    } else {
+      err.textContent = "Access denied: " + data.message;
+    }
+  } catch(e) { err.textContent = "Connection failed — is the server running?"; }
+}
+
+async function doLogout() {
+  await fetch("/api/logout",{method:"POST",credentials:"include"});
+  location.reload();
+}
+
+// ── VIEW SWITCHING ──
+function switchView(view, btn) {
+  document.querySelectorAll(".nav-btn").forEach(b => b.classList.remove("active"));
+  document.querySelectorAll(".view").forEach(v => v.classList.remove("active"));
+  btn.classList.add("active");
+  document.getElementById(view + "-view").classList.add("active");
+  currentView = view;
+  const titles = {chat: "Chat with FRIDAY", brain: "Brain & Agent Monitor"};
+  document.getElementById("view-title").textContent = titles[view] || view;
+  if (view === "brain") { loadAgents(); loadActivity(); initBrainCanvas(); }
+}
+
+// ── SEND MESSAGE ──
+async function sendMessage() {
+  const msg = inp.value.trim();
+  if (!msg) return;
+  inp.value = ""; inp.style.height = "auto";
+  addMsg("user", currentUser ? currentUser.toUpperCase() : "YOU", msg);
+  document.getElementById("send-btn").disabled = true;
+  const tid = "t" + Date.now();
+  addTyping(tid);
+  try {
+    const res  = await fetch("/api/chat",{method:"POST",headers:{"Content-Type":"application/json"},credentials:"include",body:JSON.stringify({message:msg})});
+    const data = await res.json();
+    removeTyping(tid);
+    if (data.reply) addMsg("friday","FRIDAY",data.reply);
+    if (data.agent_commands && data.agent_commands.length) {
+      for (const cmd of data.agent_commands) {
+        addBadge("⚡ " + cmd.action.toUpperCase());
+        await fetch("/api/agent",{method:"POST",headers:{"Content-Type":"application/json"},credentials:"include",body:JSON.stringify(cmd)});
+      }
+    }
+    loadMemory();
+  } catch(e) {
+    removeTyping(tid);
+    addMsg("friday","FRIDAY","Connection error. Please try again.");
+  }
+  document.getElementById("send-btn").disabled = false;
+  inp.focus();
+}
+
+function addMsg(role, sender, text) {
+  const msgs = document.getElementById("messages");
+  const row  = document.createElement("div"); row.className = "msg-row " + role;
+  const av   = document.createElement("div"); av.className = "av " + (role==="friday"?"fr":"us");
+  av.textContent = role==="friday" ? "FR" : (currentUser?currentUser[0].toUpperCase():"U");
+  const body = document.createElement("div"); body.className = "msg-body";
+  const name = document.createElement("div"); name.className = "msg-name"; name.textContent = sender;
+  const text_el = document.createElement("div"); text_el.className = "msg-text"; text_el.textContent = text;
+  body.appendChild(name); body.appendChild(text_el);
+  row.appendChild(av); row.appendChild(body);
+  msgs.appendChild(row); msgs.scrollTop = msgs.scrollHeight;
+}
+function addTyping(id) {
+  const msgs = document.getElementById("messages");
+  const row  = document.createElement("div"); row.className="msg-row friday"; row.id=id;
+  const av   = document.createElement("div"); av.className="av fr"; av.textContent="FR";
+  const body = document.createElement("div"); body.className="msg-body";
+  const name = document.createElement("div"); name.className="msg-name"; name.textContent="FRIDAY";
+  const d    = document.createElement("div"); d.innerHTML='<div class="dots"><span></span><span></span><span></span></div>';
+  body.appendChild(name); body.appendChild(d);
+  row.appendChild(av); row.appendChild(body);
+  msgs.appendChild(row); msgs.scrollTop=msgs.scrollHeight;
+}
+function removeTyping(id) { document.getElementById(id)?.remove(); }
+function addBadge(text) {
+  const msgs = document.getElementById("messages");
+  const d = document.createElement("div"); d.className="badge"; d.textContent=text;
+  msgs.appendChild(d); msgs.scrollTop=msgs.scrollHeight;
+}
+
+// ── MEMORY ──
+async function loadMemory() {
+  try {
+    const r = await fetch("/api/memory",{credentials:"include"});
+    if (!r.ok) return;
+    const d = await r.json();
+    document.getElementById("notes-list").innerHTML = (d.notes||[]).slice(-4).map(n=>'<div class="s-note">'+n+'</div>').join("")||'<div class="s-item">No notes yet</div>';
+    document.getElementById("facts-list").innerHTML = (d.facts||[]).slice(-5).map(f=>'<div class="s-item">• '+f+'</div>').join("")||'<div class="s-item">No facts yet</div>';
+    document.getElementById("research-list").innerHTML = (d.research_topics||[]).map(t=>'<div class="s-item">🔬 '+t+'</div>').join("")||'<div class="s-item">None yet</div>';
+    const fc = d.knowledge_count||0;
+    document.getElementById("s-facts").textContent = fc;
+    document.getElementById("know-v").textContent  = fc;
+    document.getElementById("know-f").style.width  = Math.min((fc/500)*100,100)+"%";
+    document.getElementById("s-api").textContent   = d.api_connected ? "ON" : "OLLAMA";
+  } catch(e){}
+}
+
+// ── STATS ──
+function startStats() {
+  setInterval(()=>{ document.getElementById("s-time").textContent = new Date().toLocaleTimeString(); },1000);
+  setInterval(async()=>{
+    try {
+      const r = await fetch("/api/agent/system",{credentials:"include"});
+      const d = await r.json();
+      if(d.info){
+        const cpu=d.info.cpu_percent||0, ram=Math.round((d.info.ram_used_mb/d.info.ram_total_mb)*100)||0;
+        document.getElementById("cpu-v").textContent=cpu+"%"; document.getElementById("ram-v").textContent=ram+"%";
+        document.getElementById("cpu-f").style.width=cpu+"%"; document.getElementById("ram-f").style.width=ram+"%";
+      }
+    }catch(e){}
+  },3000);
+  setInterval(loadMemory,8000);
+  setInterval(()=>{ if(currentView==="brain"){ loadAgents(); loadActivity(); } },3000);
+}
+
+// ── AGENTS ──
+async function loadAgents() {
+  try {
+    const r = await fetch("/api/agents",{credentials:"include"});
+    const agents = await r.json();
+    const icons = {learning_agent:"📚",research_agent:"🔍",memory_agent:"💾",web_search_agent:"🌐",deepthink_agent:"🧠"};
+    const labels = {learning_agent:"LEARNING",research_agent:"RESEARCH",memory_agent:"MEMORY",web_search_agent:"WEB SEARCH",deepthink_agent:"DEEP THINK"};
+    const half = Math.ceil(agents.length/2);
+    ["agent-cards","agent-cards2"].forEach((id,idx)=>{
+      const el = document.getElementById(id);
+      el.innerHTML=""; el.style.display="flex"; el.style.flexDirection="column"; el.style.gap="12px";
+      agents.slice(idx*half,(idx+1)*half).forEach(a=>{
+        const on = a.is_active;
+        const card = document.createElement("div");
+        card.className = "agent-card" + (on?" active":"");
+        card.innerHTML = `
+          <div class="agent-header">
+            <div class="agent-name">${icons[a.agent_name]||"⚙"} ${labels[a.agent_name]||a.agent_name}</div>
+            <button class="agent-toggle ${on?"on":""}" onclick="toggleAgent('${a.agent_name}',this)">${on?"ACTIVE":"IDLE"}</button>
+          </div>
+          <div class="agent-status">
+            <div class="status-dot ${on?"active":""}"></div>
+            ${a.status||"idle"} · ${a.knowledge_count||0} items learned
+          </div>`;
+        el.appendChild(card);
+      });
+    });
+    updateBrainNodes(agents);
+  } catch(e){}
+}
+
+async function toggleAgent(name, btn) {
+  try {
+    const r = await fetch(`/api/agents/${name}/toggle`,{method:"POST",credentials:"include"});
+    const d = await r.json();
+    btn.textContent = d.is_active ? "ACTIVE" : "IDLE";
+    btn.classList.toggle("on", !!d.is_active);
+    btn.closest(".agent-card").classList.toggle("active", !!d.is_active);
+    loadAgents();
+  } catch(e){}
+}
+
+async function loadActivity() {
+  try {
+    const r = await fetch("/api/activity",{credentials:"include"});
+    const items = await r.json();
+    document.getElementById("activity-feed").innerHTML = items.slice(0,15).map(i=>`
+      <div class="activity-item">
+        <div class="activity-agent">${i.agent_name}</div>
+        <div class="activity-action">${i.action} ${i.result?'→ '+i.result:''}</div>
+        <div class="activity-time">${new Date(i.timestamp).toLocaleTimeString()}</div>
+      </div>`).join("") || '<div class="s-item">No activity yet</div>';
+  } catch(e){}
+}
+
+// ── RESEARCH ──
+function setDepth(d, btn) {
+  researchDepth = d;
+  document.querySelectorAll(".depth-btn").forEach(b=>b.classList.remove("selected"));
+  btn.classList.add("selected");
+}
+
+async function assignResearch() {
+  const topic = document.getElementById("research-input").value.trim();
+  if (!topic) return;
+  const status = document.getElementById("research-status");
+  const depthLabels = {1:"Quick scan",2:"Normal research",3:"Deep dive",4:"Exhaustive analysis"};
+  status.textContent = `⚡ Deploying research agent: ${depthLabels[researchDepth]} on "${topic}"...`;
+  try {
+    await fetch("/api/research",{method:"POST",headers:{"Content-Type":"application/json"},credentials:"include",body:JSON.stringify({topic,depth:researchDepth})});
+    status.textContent = `✓ Research agent active on "${topic}". Depth: ${depthLabels[researchDepth]}. Check activity feed for progress.`;
+    document.getElementById("research-input").value = "";
+  } catch(e) {
+    status.textContent = "Error deploying research agent.";
+  }
+}
+
+// ── BRAIN CANVAS ──
+let brainCtx = null;
+let brainAgents = [];
+
+function initBrainCanvas() {
+  const canvas = document.getElementById("brain-canvas");
+  if (!canvas) return;
+  brainCtx = canvas.getContext("2d");
+  const wrap = canvas.parentElement;
+  canvas.width  = wrap.clientWidth - 32;
+  canvas.height = 280;
+  setupBrainNodes();
+  if (animFrame) cancelAnimationFrame(animFrame);
+  animateBrain();
+}
+
+function setupBrainNodes() {
+  const canvas = document.getElementById("brain-canvas");
+  const w = canvas.width, h = canvas.height;
+  // Central FRIDAY brain node
+  brainNodes = [{
+    x: w/2, y: h/2, r: 28, label: "FRIDAY", color: "#ff6a00",
+    pulse: 0, pulseDir: 1, type: "core", active: true
+  }];
+  // Agent nodes around the center
+  const agentDefs = [
+    {label:"LEARNING",  color:"#ff4500", angle: 0},
+    {label:"RESEARCH",  color:"#ff6a00", angle: 72},
+    {label:"MEMORY",    color:"#ff8c00", angle: 144},
+    {label:"WEB SEARCH",color:"#ffa500", angle: 216},
+    {label:"DEEPTHINK", color:"#ffcc00", angle: 288},
+  ];
+  agentDefs.forEach(a => {
+    const rad = (a.angle * Math.PI) / 180;
+    brainNodes.push({
+      x: w/2 + Math.cos(rad) * 110,
+      y: h/2 + Math.sin(rad) * 100,
+      r: 16, label: a.label, color: a.color,
+      pulse: Math.random() * Math.PI * 2,
+      pulseDir: 1, type: "agent", active: false,
+      angle: rad
+    });
+  });
+  brainParticles = [];
+}
+
+function updateBrainNodes(agents) {
+  const labels = {learning_agent:"LEARNING",research_agent:"RESEARCH",memory_agent:"MEMORY",web_search_agent:"WEB SEARCH",deepthink_agent:"DEEPTHINK"};
+  agents.forEach(a => {
+    const label = labels[a.agent_name];
+    const node  = brainNodes.find(n => n.label === label);
+    if (node) {
+      node.active = !!a.is_active;
+      if (node.active && Math.random() < 0.3) {
+        spawnParticle(node, brainNodes[0]);
+      }
+    }
+  });
+}
+
+function spawnParticle(from, to) {
+  brainParticles.push({
+    x: from.x, y: from.y,
+    tx: to.x, ty: to.y,
+    progress: 0,
+    speed: 0.008 + Math.random() * 0.012,
+    color: from.color,
+    size: 3 + Math.random() * 2
+  });
+}
+
+function animateBrain() {
+  const canvas = document.getElementById("brain-canvas");
+  if (!canvas || !brainCtx) return;
+  const ctx = brainCtx;
+  const w = canvas.width, h = canvas.height;
+  ctx.clearRect(0,0,w,h);
+
+  // Background grid
+  ctx.strokeStyle = "#ff6a0008";
+  ctx.lineWidth = 1;
+  for (let x=0; x<w; x+=40) { ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,h); ctx.stroke(); }
+  for (let y=0; y<h; y+=40) { ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(w,y); ctx.stroke(); }
+
+  // Connection lines
+  brainNodes.slice(1).forEach(n => {
+    const core = brainNodes[0];
+    const alpha = n.active ? 0.4 : 0.08;
+    ctx.beginPath();
+    ctx.strokeStyle = n.active ? n.color + "66" : "#ff6a0022";
+    ctx.lineWidth = n.active ? 1.5 : 0.5;
+    ctx.setLineDash(n.active ? [] : [4,8]);
+    ctx.moveTo(core.x, core.y); ctx.lineTo(n.x, n.y);
+    ctx.stroke(); ctx.setLineDash([]);
+  });
+
+  // Update & draw particles
+  brainParticles = brainParticles.filter(p => p.progress < 1);
+  brainParticles.forEach(p => {
+    p.progress += p.speed;
+    const t = p.progress;
+    const cx = p.x + (p.tx - p.x) * t;
+    const cy = p.y + (p.ty - p.y) * t;
+    ctx.beginPath();
+    ctx.arc(cx, cy, p.size, 0, Math.PI*2);
+    ctx.fillStyle = p.color + Math.floor((1-t)*255).toString(16).padStart(2,"0");
+    ctx.fill();
+    // Trail
+    ctx.beginPath();
+    const t2 = Math.max(0, t-0.05);
+    ctx.moveTo(p.x+(p.tx-p.x)*t2, p.y+(p.ty-p.y)*t2);
+    ctx.lineTo(cx, cy);
+    ctx.strokeStyle = p.color + "44";
+    ctx.lineWidth = 1;
+    ctx.stroke();
+  });
+
+  // Spawn particles from active agents periodically
+  if (Math.random() < 0.08) {
+    brainNodes.slice(1).forEach(n => {
+      if (n.active && Math.random() < 0.4) {
+        spawnParticle(n, brainNodes[0]);
+        if (Math.random() < 0.3) spawnParticle(brainNodes[0], n);
+      }
+    });
+  }
+
+  // Draw nodes
+  brainNodes.forEach(n => {
+    n.pulse += 0.04 * n.pulseDir;
+    if (n.pulse > 1) n.pulseDir = -1;
+    if (n.pulse < 0) n.pulseDir = 1;
+
+    // Glow
+    if (n.active || n.type === "core") {
+      const glow = ctx.createRadialGradient(n.x,n.y,0,n.x,n.y,n.r*3);
+      glow.addColorStop(0, n.color + "33");
+      glow.addColorStop(1, "transparent");
+      ctx.fillStyle = glow;
+      ctx.beginPath(); ctx.arc(n.x,n.y,n.r*3,0,Math.PI*2); ctx.fill();
+    }
+
+    // Pulse ring
+    if (n.active || n.type === "core") {
+      const pr = n.r + 6 + n.pulse * 8;
+      ctx.beginPath(); ctx.arc(n.x,n.y,pr,0,Math.PI*2);
+      ctx.strokeStyle = n.color + Math.floor(n.pulse * 80 + 30).toString(16).padStart(2,"0");
+      ctx.lineWidth = 1; ctx.stroke();
+    }
+
+    // Node body
+    const grad = ctx.createRadialGradient(n.x,n.y,0,n.x,n.y,n.r);
+    grad.addColorStop(0, n.active || n.type==="core" ? n.color + "99" : "#333");
+    grad.addColorStop(1, n.active || n.type==="core" ? n.color + "22" : "#111");
+    ctx.beginPath(); ctx.arc(n.x,n.y,n.r,0,Math.PI*2);
+    ctx.fillStyle = grad; ctx.fill();
+    ctx.strokeStyle = n.active || n.type==="core" ? n.color : "#ff6a0033";
+    ctx.lineWidth = n.type==="core" ? 2 : 1.5;
+    ctx.stroke();
+
+    // Label
+    ctx.fillStyle = n.active || n.type==="core" ? n.color : "#ff6a0055";
+    ctx.font = n.type==="core" ? "bold 9px Courier New" : "8px Courier New";
+    ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    if (n.type === "core") {
+      ctx.fillText("FRIDAY", n.x, n.y-4);
+      ctx.fillStyle = "#ff6a0099";
+      ctx.font = "7px Courier New";
+      ctx.fillText("BRAIN", n.x, n.y+6);
+    } else {
+      ctx.fillText(n.label, n.x, n.y + n.r + 12);
+    }
+  });
+
+  animFrame = requestAnimationFrame(animateBrain);
+}
+
+// Auto-restart canvas on resize
+window.addEventListener("resize", () => {
+  if (currentView === "brain") initBrainCanvas();
+});
+
+// Session check
+(async()=>{
+  try {
+    const r = await fetch("/api/me",{credentials:"include"});
+    if(r.ok){
+      const d=await r.json();
+      if(d.logged_in){
+        currentUser=d.username;
+        document.getElementById("login-screen").style.display="none";
+        document.getElementById("app").style.display="block";
+        addMsg("friday","FRIDAY","Welcome back, "+currentUser+". FRIDAY v4 online.");
+        loadMemory(); startStats(); loadAgents();
+      }
+    }
+  }catch(e){}
+})();
+</script>
 </body>
 </html>
