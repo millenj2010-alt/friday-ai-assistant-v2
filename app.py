@@ -1,5 +1,5 @@
 """
-Friday AI v4 - Complete Backend
+Friday AI v4 - Complete Backend with NVIDIA API
 """
 
 import os
@@ -19,6 +19,7 @@ CORS(app)
 
 OLLAMA_URL = os.getenv('OLLAMA_API_URL', 'http://localhost:11434')
 OLLAMA_MODEL = os.getenv('OLLAMA_MODEL', 'mistral')
+NVIDIA_API_KEY = os.getenv('NVIDIA_API_KEY', '')
 DB_PATH = 'friday_ai.db'
 
 _db_conn = None
@@ -90,28 +91,54 @@ def chat():
         return jsonify({'error': 'No message'}), 400
     
     try:
-        # Call Ollama
-        response = requests.post(
-            f'{OLLAMA_URL}/api/generate',
-            json={'model': OLLAMA_MODEL, 'prompt': message, 'stream': False},
-            timeout=60
-        )
+        reply = None
         
-        if response.status_code == 200:
-            result = response.json()
-            reply = result.get('response', 'No response')
+        # Try NVIDIA API first if key is available
+        if NVIDIA_API_KEY:
+            try:
+                response = requests.post(
+                    'https://integrate.api.nvidia.com/v1/chat/completions',
+                    headers={'Authorization': f'Bearer {NVIDIA_API_KEY}', 'Content-Type': 'application/json'},
+                    json={
+                        'model': 'meta/llama-2-70b-chat',
+                        'messages': [{'role': 'user', 'content': message}],
+                        'temperature': 0.7,
+                        'max_tokens': 1024
+                    },
+                    timeout=60
+                )
+                if response.status_code == 200:
+                    result = response.json()
+                    reply = result.get('choices', [{}])[0].get('message', {}).get('content', 'No response')
+                    logger.info("Using NVIDIA API")
+            except Exception as nvidia_error:
+                logger.warning(f"NVIDIA API error: {nvidia_error}, falling back to Ollama")
+        
+        # Fall back to Ollama if NVIDIA failed or no key
+        if not reply:
+            response = requests.post(
+                f'{OLLAMA_URL}/api/generate',
+                json={'model': OLLAMA_MODEL, 'prompt': message, 'stream': False},
+                timeout=60
+            )
             
-            # Save to DB
-            db = get_db()
-            db.execute('INSERT INTO messages (user_id, content, role) VALUES (?, ?, ?)', 
-                      (1, message, 'user'))
-            db.execute('INSERT INTO messages (user_id, content, role) VALUES (?, ?, ?)', 
-                      (1, reply, 'assistant'))
-            db.commit()
-            
-            return jsonify({'reply': reply})
-        else:
-            return jsonify({'error': 'Ollama error'}), 500
+            if response.status_code == 200:
+                result = response.json()
+                reply = result.get('response', 'No response')
+                logger.info("Using Ollama API")
+            else:
+                return jsonify({'error': 'AI service error'}), 500
+        
+        # Save to DB
+        db = get_db()
+        db.execute('INSERT INTO messages (user_id, content, role) VALUES (?, ?, ?)', 
+                  (1, message, 'user'))
+        db.execute('INSERT INTO messages (user_id, content, role) VALUES (?, ?, ?)', 
+                  (1, reply, 'assistant'))
+        db.commit()
+        
+        return jsonify({'reply': reply})
+        
     except Exception as e:
         logger.error(f"Chat error: {e}")
         return jsonify({'error': str(e)}), 500
@@ -146,18 +173,21 @@ def add_knowledge():
 
 @app.route('/api/status', methods=['GET'])
 def get_status():
+    status = {'ollama': 'offline', 'nvidia': 'offline', 'models': 0}
+    
     try:
         response = requests.get(f'{OLLAMA_URL}/api/tags', timeout=5)
         if response.status_code == 200:
             models = response.json().get('models', [])
-            return jsonify({
-                'ollama': 'online' if models else 'offline',
-                'models': len(models),
-                'model': OLLAMA_MODEL
-            })
+            status['ollama'] = 'online' if models else 'offline'
+            status['models'] = len(models)
     except:
         pass
-    return jsonify({'ollama': 'offline', 'models': 0})
+    
+    if NVIDIA_API_KEY:
+        status['nvidia'] = 'online'
+    
+    return jsonify(status)
 
 # ==================== STATIC ====================
 
