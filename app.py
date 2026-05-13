@@ -120,6 +120,7 @@ def chat():
         # Try NVIDIA API first if key is available
         if NVIDIA_API_KEY:
             try:
+                logger.info(f"Trying NVIDIA API with key: {NVIDIA_API_KEY[:10]}...")
                 response = requests.post(
                     'https://integrate.api.nvidia.com/v1/chat/completions',
                     headers={'Authorization': f'Bearer {NVIDIA_API_KEY}', 'Content-Type': 'application/json'},
@@ -131,27 +132,38 @@ def chat():
                     },
                     timeout=60
                 )
+                logger.info(f"NVIDIA response status: {response.status_code}")
                 if response.status_code == 200:
                     result = response.json()
                     reply = result.get('choices', [{}])[0].get('message', {}).get('content', 'No response')
-                    logger.info("Using NVIDIA API")
+                    logger.info(f"NVIDIA reply: {reply[:50]}...")
             except Exception as nvidia_error:
-                logger.warning(f"NVIDIA API error: {nvidia_error}")
+                logger.error(f"NVIDIA API error: {nvidia_error}")
         
         # Fall back to Ollama if NVIDIA failed or no key
         if not reply:
-            response = requests.post(
-                f'{OLLAMA_URL}/api/generate',
-                json={'model': OLLAMA_MODEL, 'prompt': message, 'stream': False},
-                timeout=60
-            )
-            
-            if response.status_code == 200:
-                result = response.json()
-                reply = result.get('response', 'No response')
-                logger.info("Using Ollama API")
-            else:
-                return jsonify({'error': 'AI service error'}), 500
+            try:
+                logger.info(f"Trying Ollama at {OLLAMA_URL}")
+                response = requests.post(
+                    f'{OLLAMA_URL}/api/generate',
+                    json={'model': OLLAMA_MODEL, 'prompt': message, 'stream': False},
+                    timeout=60
+                )
+                logger.info(f"Ollama response status: {response.status_code}")
+                
+                if response.status_code == 200:
+                    result = response.json()
+                    reply = result.get('response', 'No response')
+                    logger.info(f"Ollama reply: {reply[:50]}...")
+                else:
+                    logger.error(f"Ollama error: {response.status_code}")
+                    reply = f"Ollama error: {response.status_code}"
+            except Exception as ollama_error:
+                logger.error(f"Ollama error: {ollama_error}")
+                reply = f"Error: {str(ollama_error)}"
+        
+        if not reply:
+            reply = "I'm thinking..."
         
         # Save to DB
         db = get_db()
@@ -164,7 +176,7 @@ def chat():
         return jsonify({'reply': reply})
         
     except Exception as e:
-        logger.error(f"Chat error: {e}")
+        logger.error(f"Chat error: {e}", exc_info=True)
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/messages', methods=['GET'])
