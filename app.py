@@ -1,21 +1,15 @@
 """
-Friday AI v3 - Complete Backend with All Features
+Friday AI v4 - Complete Backend
 """
 
 import os
 import sqlite3
-import threading
-import time
 import json
 from datetime import datetime
-from pathlib import Path
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
 import requests
-from bs4 import BeautifulSoup
 import logging
-import random
-from openai import OpenAI
 
 logging.basicConfig(level=logging.WARNING)
 logger = logging.getLogger(__name__)
@@ -25,17 +19,7 @@ CORS(app)
 
 OLLAMA_URL = os.getenv('OLLAMA_API_URL', 'http://localhost:11434')
 OLLAMA_MODEL = os.getenv('OLLAMA_MODEL', 'mistral')
-OPENAI_API_KEY = os.getenv('OPENAI_API_KEY', '')
 DB_PATH = 'friday_ai.db'
-
-# Initialize OpenAI client if API key is available
-openai_client = None
-if OPENAI_API_KEY:
-    try:
-        openai_client = OpenAI(api_key=OPENAI_API_KEY)
-    except Exception as e:
-        logger.warning(f"Failed to initialize OpenAI client: {e}")
-        openai_client = None
 
 _db_conn = None
 
@@ -47,399 +31,139 @@ def get_db():
     return _db_conn
 
 def init_db():
-    """Initialize database with all tables"""
-    conn = get_db()
-    c = conn.cursor()
-    
-    # Chat history
-    c.execute('''CREATE TABLE IF NOT EXISTS chat_history (
-        id INTEGER PRIMARY KEY,
-        timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
-        role TEXT,
-        message TEXT
-    )''')
-    
-    # Knowledge base
-    c.execute('''CREATE TABLE IF NOT EXISTS knowledge_base (
-        id INTEGER PRIMARY KEY,
-        timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
-        source TEXT,
-        content TEXT,
-        confidence REAL DEFAULT 0.5
-    )''')
-    
-    # Agent status
-    c.execute('''CREATE TABLE IF NOT EXISTS agent_status (
-        agent_name TEXT PRIMARY KEY,
-        is_active INTEGER DEFAULT 0,
-        status TEXT DEFAULT 'idle',
-        last_run DATETIME,
-        knowledge_count INTEGER DEFAULT 0
-    )''')
-    
-    # Agent activity log
-    c.execute('''CREATE TABLE IF NOT EXISTS agent_activity (
-        id INTEGER PRIMARY KEY,
-        timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
-        agent_name TEXT,
-        action TEXT,
-        result TEXT
-    )''')
-    
-    # Distributed nodes
-    c.execute('''CREATE TABLE IF NOT EXISTS distributed_nodes (
-        id INTEGER PRIMARY KEY,
-        node_id TEXT UNIQUE,
-        hostname TEXT,
-        ip_address TEXT,
-        port INTEGER,
-        is_active INTEGER DEFAULT 1,
-        last_heartbeat DATETIME
-    )''')
-    
-    # Indexes
-    c.execute('CREATE INDEX IF NOT EXISTS idx_chat_role ON chat_history(role)')
-    c.execute('CREATE INDEX IF NOT EXISTS idx_knowledge_source ON knowledge_base(source)')
-    c.execute('CREATE INDEX IF NOT EXISTS idx_agent_activity ON agent_activity(agent_name)')
-    
-    conn.commit()
-
-def save_chat(role, message):
-    """Save chat message"""
-    conn = get_db()
-    c = conn.cursor()
-    c.execute('INSERT INTO chat_history (role, message) VALUES (?, ?)', (role, message))
-    conn.commit()
-
-def get_chat_history(limit=50):
-    """Get chat history"""
-    conn = get_db()
-    c = conn.cursor()
-    c.execute('SELECT role, message, timestamp FROM chat_history ORDER BY id DESC LIMIT ?', (limit,))
-    messages = [dict(row) for row in c.fetchall()]
-    return list(reversed(messages))
-
-def save_knowledge(source, content, confidence=0.7):
-    """Save knowledge"""
-    conn = get_db()
-    c = conn.cursor()
-    c.execute('INSERT INTO knowledge_base (source, content, confidence) VALUES (?, ?, ?)', 
-              (source, content, confidence))
-    conn.commit()
-
-def get_knowledge(limit=100):
-    """Get knowledge base"""
-    conn = get_db()
-    c = conn.cursor()
-    c.execute('SELECT * FROM knowledge_base ORDER BY id DESC LIMIT ?', (limit,))
-    return [dict(row) for row in c.fetchall()]
-
-def log_agent_activity(agent_name, action, result):
-    """Log agent activity"""
-    conn = get_db()
-    c = conn.cursor()
-    c.execute('INSERT INTO agent_activity (agent_name, action, result) VALUES (?, ?, ?)',
-              (agent_name, action, result))
-    conn.commit()
-
-def get_agent_activity(limit=50):
-    """Get agent activity"""
-    conn = get_db()
-    c = conn.cursor()
-    c.execute('SELECT * FROM agent_activity ORDER BY id DESC LIMIT ?', (limit,))
-    return [dict(row) for row in c.fetchall()]
-
-def get_brain_state():
-    """Get current brain state for visualization"""
-    conn = get_db()
-    c = conn.cursor()
-    
-    # Get agent statuses
-    c.execute('SELECT agent_name, is_active, status FROM agent_status')
-    agents = [dict(row) for row in c.fetchall()]
-    
-    # Get recent activity
-    c.execute('SELECT agent_name, action FROM agent_activity ORDER BY id DESC LIMIT 20')
-    activities = [dict(row) for row in c.fetchall()]
-    
-    # Get knowledge count
-    c.execute('SELECT COUNT(*) as count FROM knowledge_base')
-    knowledge_count = c.fetchone()['count']
-    
-    return {
-        'agents': agents,
-        'activities': activities,
-        'knowledge_count': knowledge_count,
-        'timestamp': datetime.now().isoformat()
-    }
-
-def list_files(path=None):
-    """List files in directory"""
-    try:
-        if path is None:
-            path = str(Path.home())
-        
-        path = Path(path)
-        if not path.exists():
-            return {'error': 'Path does not exist'}
-        
-        if not path.is_dir():
-            return {'error': 'Not a directory'}
-        
-        items = []
-        for item in path.iterdir():
-            try:
-                items.append({
-                    'name': item.name,
-                    'path': str(item),
-                    'type': 'dir' if item.is_dir() else 'file',
-                    'size': item.stat().st_size if item.is_file() else 0
-                })
-            except:
-                pass
-        
-        return {
-            'path': str(path),
-            'items': sorted(items, key=lambda x: (x['type'] != 'dir', x['name']))
-        }
-    except Exception as e:
-        return {'error': str(e)}
-
-def read_file(path):
-    """Read file content"""
-    try:
-        path = Path(path)
-        if not path.exists():
-            return {'error': 'File does not exist'}
-        
-        if not path.is_file():
-            return {'error': 'Not a file'}
-        
-        if path.stat().st_size > 1024 * 1024:
-            return {'error': 'File too large (max 1MB)'}
-        
-        with open(path, 'r', encoding='utf-8', errors='ignore') as f:
-            content = f.read()
-        
-        return {'content': content, 'path': str(path)}
-    except Exception as e:
-        return {'error': str(e)}
-
-def scrape_web_fast(query):
-    """Fast web scraping"""
-    try:
-        headers = {'User-Agent': 'Mozilla/5.0'}
-        response = requests.get(
-            f"https://duckduckgo.com/html/?q={query}",
-            headers=headers,
-            timeout=5
+    """Initialize database"""
+    db = get_db()
+    db.execute('''
+        CREATE TABLE IF NOT EXISTS users (
+            id INTEGER PRIMARY KEY,
+            username TEXT UNIQUE,
+            password TEXT
         )
-        soup = BeautifulSoup(response.content, 'html.parser')
-        
-        for result in soup.find_all('a', {'class': 'result__a'})[:3]:
-            title = result.get_text(strip=True)
-            href = result.get('href')
-            if title and href and len(title) > 5:
-                save_knowledge(href, title, 0.7)
-                log_agent_activity('learning_agent', 'web_scrape', f'Found: {title[:50]}')
-    except:
-        pass
+    ''')
+    db.execute('''
+        CREATE TABLE IF NOT EXISTS messages (
+            id INTEGER PRIMARY KEY,
+            user_id INTEGER,
+            content TEXT,
+            role TEXT,
+            timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY(user_id) REFERENCES users(id)
+        )
+    ''')
+    db.execute('''
+        CREATE TABLE IF NOT EXISTS knowledge (
+            id INTEGER PRIMARY KEY,
+            user_id INTEGER,
+            fact TEXT,
+            timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY(user_id) REFERENCES users(id)
+        )
+    ''')
+    db.commit()
 
-def learning_agent_worker():
-    """24/7 learning agent"""
-    while True:
-        try:
-            conn = get_db()
-            c = conn.cursor()
-            c.execute('SELECT is_active FROM agent_status WHERE agent_name = ?', ('learning_agent',))
-            row = c.fetchone()
-            
-            if row and row['is_active']:
-                c.execute('UPDATE agent_status SET status = ? WHERE agent_name = ?',
-                        ('researching', 'learning_agent'))
-                conn.commit()
-                
-                history = get_chat_history(limit=3)
-                if history:
-                    msg = history[-1]['message']
-                    if len(msg) > 15:
-                        scrape_web_fast(msg[:50])
-                
-                c.execute('UPDATE agent_status SET last_run = ?, status = ? WHERE agent_name = ?',
-                        (datetime.now(), 'idle', 'learning_agent'))
-                conn.commit()
-            
-            time.sleep(60)
-        except:
-            time.sleep(60)
+init_db()
 
-# Routes
+# ==================== AUTH ====================
 
-@app.route('/')
-def index():
-    return app.send_static_file('index.html')
+@app.route('/api/login', methods=['POST'])
+def login():
+    data = request.json
+    username = data.get('username')
+    password = data.get('password')
+    
+    if username == 'admin' and password == 'friday':
+        return jsonify({'success': True, 'user_id': 1, 'username': 'admin'})
+    return jsonify({'success': False, 'error': 'Invalid credentials'}), 401
 
-@app.route('/api/health', methods=['GET'])
-def health():
-    try:
-        r = requests.get(f"{OLLAMA_URL}/api/tags", timeout=2)
-        return jsonify({'status': 'ok', 'ollama': 'connected' if r.status_code == 200 else 'error'}), 200
-    except:
-        return jsonify({'status': 'ok', 'ollama': 'disconnected'}), 200
+@app.route('/api/me', methods=['GET'])
+def get_me():
+    return jsonify({'user_id': 1, 'username': 'admin'})
+
+# ==================== CHAT ====================
 
 @app.route('/api/chat', methods=['POST'])
 def chat():
+    data = request.json
+    message = data.get('message', '')
+    
+    if not message:
+        return jsonify({'error': 'No message'}), 400
+    
     try:
-        data = request.json
-        msg = data.get('message', '').strip()
-        deepthink = data.get('deepthink', False)
-        use_external_ai = data.get('use_external_ai', False)
+        # Call Ollama
+        response = requests.post(
+            f'{OLLAMA_URL}/api/generate',
+            json={'model': OLLAMA_MODEL, 'prompt': message, 'stream': False},
+            timeout=60
+        )
         
-        if not msg:
-            return jsonify({'error': 'No message'}), 400
-        
-        save_chat('user', msg)
-        
-        history = get_chat_history(limit=5)
-        context = "\n".join([f"{m['role']}: {m['message'][:100]}" for m in history])
-        
-        # Use external AI (OpenAI) for coding tasks
-        if use_external_ai and openai_client:
-            try:
-                response_obj = openai_client.chat.completions.create(
-                    model="gpt-4",
-                    messages=[
-                        {"role": "system", "content": "You are Friday AI, an advanced assistant that can code and improve itself. Provide high-quality code and solutions."},
-                        {"role": "user", "content": msg}
-                    ],
-                    temperature=0.7
-                )
-                response = response_obj.choices[0].message.content
-                log_agent_activity('deepthink_agent', 'external_ai_call', 'Used OpenAI GPT-4')
-            except Exception as e:
-                response = f"External AI error: {str(e)}. Falling back to Ollama."
-                use_external_ai = False
-        
-        # Fall back to Ollama
-        if not use_external_ai or not openai_client:
-            # DeepThink mode - longer thinking
-            if deepthink:
-                prompt = f"""You are Friday AI, an advanced assistant that can code and improve itself.
-{context}
-
-Think deeply about this request. If it involves coding, provide Python code that can improve Friday AI or modify files.
-Provide a comprehensive response with code if needed.
-
-Assistant:"""
-            else:
-                prompt = f"{context}\nAssistant:"
+        if response.status_code == 200:
+            result = response.json()
+            reply = result.get('response', 'No response')
             
-            try:
-                r = requests.post(
-                    f"{OLLAMA_URL}/api/generate",
-                    json={"model": OLLAMA_MODEL, "prompt": prompt, "stream": False},
-                    timeout=60 if deepthink else 30
-                )
-                response = r.json().get('response', 'No response').strip() if r.status_code == 200 else "Error"
-            except:
-                response = "Ollama timeout"
-        
-        save_chat('assistant', response)
-        
-        if deepthink:
-            log_agent_activity('deepthink_agent', 'deep_thinking', 'Processed complex request')
-        
-        return jsonify({'response': response}), 200
+            # Save to DB
+            db = get_db()
+            db.execute('INSERT INTO messages (user_id, content, role) VALUES (?, ?, ?)', 
+                      (1, message, 'user'))
+            db.execute('INSERT INTO messages (user_id, content, role) VALUES (?, ?, ?)', 
+                      (1, reply, 'assistant'))
+            db.commit()
+            
+            return jsonify({'reply': reply})
+        else:
+            return jsonify({'error': 'Ollama error'}), 500
     except Exception as e:
+        logger.error(f"Chat error: {e}")
         return jsonify({'error': str(e)}), 500
 
-@app.route('/api/chat/history', methods=['GET'])
-def history():
-    return jsonify(get_chat_history(limit=50)), 200
+@app.route('/api/messages', methods=['GET'])
+def get_messages():
+    db = get_db()
+    messages = db.execute('SELECT * FROM messages WHERE user_id = ? ORDER BY timestamp', (1,)).fetchall()
+    return jsonify([dict(m) for m in messages])
 
-@app.route('/api/agents', methods=['GET'])
-def agents():
-    conn = get_db()
-    c = conn.cursor()
-    c.execute('SELECT * FROM agent_status')
-    agents = [dict(row) for row in c.fetchall()]
-    
-    if not agents:
-        for a in ['learning_agent', 'research_agent', 'memory_agent', 'web_search_agent', 'deepthink_agent']:
-            c.execute('INSERT OR IGNORE INTO agent_status (agent_name, is_active, status) VALUES (?, ?, ?)', 
-                     (a, 0, 'idle'))
-        conn.commit()
-        agents = [{'agent_name': a, 'is_active': 0, 'status': 'idle'} for a in ['learning_agent', 'research_agent', 'memory_agent', 'web_search_agent', 'deepthink_agent']]
-    
-    return jsonify(agents), 200
-
-@app.route('/api/agents/<name>/toggle', methods=['POST'])
-def toggle_agent(name):
-    conn = get_db()
-    c = conn.cursor()
-    c.execute('SELECT is_active FROM agent_status WHERE agent_name = ?', (name,))
-    row = c.fetchone()
-    
-    new_status = 0 if row and row['is_active'] else 1
-    c.execute('INSERT OR REPLACE INTO agent_status (agent_name, is_active, status) VALUES (?, ?, ?)', 
-             (name, new_status, 'idle'))
-    conn.commit()
-    
-    log_agent_activity(name, 'toggled', f'Status: {new_status}')
-    
-    return jsonify({'agent': name, 'is_active': new_status}), 200
-
-@app.route('/api/brain', methods=['GET'])
-def brain():
-    """Get brain state for visualization"""
-    return jsonify(get_brain_state()), 200
+# ==================== KNOWLEDGE ====================
 
 @app.route('/api/knowledge', methods=['GET'])
-def knowledge():
-    return jsonify(get_knowledge(limit=100)), 200
+def get_knowledge():
+    db = get_db()
+    knowledge = db.execute('SELECT * FROM knowledge WHERE user_id = ? ORDER BY timestamp DESC', (1,)).fetchall()
+    return jsonify([dict(k) for k in knowledge])
 
-@app.route('/api/activity', methods=['GET'])
-def activity():
-    return jsonify(get_agent_activity(limit=50)), 200
-
-@app.route('/api/files', methods=['GET'])
-def files():
-    path = request.args.get('path', None)
-    return jsonify(list_files(path)), 200
-
-@app.route('/api/files/read', methods=['POST'])
-def read():
+@app.route('/api/knowledge', methods=['POST'])
+def add_knowledge():
     data = request.json
-    path = data.get('path', '')
-    return jsonify(read_file(path)), 200
+    fact = data.get('fact', '')
+    
+    if fact:
+        db = get_db()
+        db.execute('INSERT INTO knowledge (user_id, fact) VALUES (?, ?)', (1, fact))
+        db.commit()
+        return jsonify({'success': True})
+    return jsonify({'error': 'No fact'}), 400
 
-@app.route('/api/files/write', methods=['POST'])
-def write():
-    """Write to file"""
+# ==================== STATUS ====================
+
+@app.route('/api/status', methods=['GET'])
+def get_status():
     try:
-        data = request.json
-        path = data.get('path', '')
-        content = data.get('content', '')
-        
-        path = Path(path)
-        if not path.parent.exists():
-            return {'error': 'Parent directory does not exist'}, 400
-        
-        with open(path, 'w', encoding='utf-8') as f:
-            f.write(content)
-        
-        save_knowledge(str(path), f'Modified file: {path.name}', 0.8)
-        log_agent_activity('deepthink_agent', 'file_write', f'Wrote to {path.name}')
-        
-        return jsonify({'success': True, 'path': str(path)}), 200
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        response = requests.get(f'{OLLAMA_URL}/api/tags', timeout=5)
+        if response.status_code == 200:
+            models = response.json().get('models', [])
+            return jsonify({
+                'ollama': 'online' if models else 'offline',
+                'models': len(models),
+                'model': OLLAMA_MODEL
+            })
+    except:
+        pass
+    return jsonify({'ollama': 'offline', 'models': 0})
+
+# ==================== STATIC ====================
+
+@app.route('/')
+def index():
+    return send_from_directory('static', 'index.html')
 
 if __name__ == '__main__':
-    init_db()
-    
-    t = threading.Thread(target=learning_agent_worker, daemon=True)
-    t.start()
-    
-    port = int(os.getenv('NODE_PORT', 8080))
-    app.run(host='0.0.0.0', port=port, debug=False, threaded=True)
+    app.run(host='0.0.0.0', port=8080, debug=False)
