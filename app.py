@@ -1,5 +1,5 @@
 """
-Friday AI v4 - Complete Backend with NVIDIA API
+Friday AI v4 - Complete Backend with All Endpoints
 """
 
 import os
@@ -60,7 +60,27 @@ def init_db():
             FOREIGN KEY(user_id) REFERENCES users(id)
         )
     ''')
+    db.execute('''
+        CREATE TABLE IF NOT EXISTS agents (
+            id INTEGER PRIMARY KEY,
+            user_id INTEGER,
+            name TEXT,
+            status TEXT,
+            enabled BOOLEAN DEFAULT 1,
+            FOREIGN KEY(user_id) REFERENCES users(id)
+        )
+    ''')
     db.commit()
+    
+    # Insert default agents
+    try:
+        db.execute('INSERT INTO agents (user_id, name, status, enabled) VALUES (1, "system", "idle", 1)')
+        db.execute('INSERT INTO agents (user_id, name, status, enabled) VALUES (1, "research", "idle", 1)')
+        db.execute('INSERT INTO agents (user_id, name, status, enabled) VALUES (1, "memory", "idle", 1)')
+        db.execute('INSERT INTO agents (user_id, name, status, enabled) VALUES (1, "learning", "idle", 1)')
+        db.commit()
+    except:
+        pass
 
 init_db()
 
@@ -68,13 +88,17 @@ init_db()
 
 @app.route('/api/login', methods=['POST'])
 def login():
-    data = request.json
-    username = data.get('username')
-    password = data.get('password')
-    
-    if username == 'admin' and password == 'friday':
-        return jsonify({'success': True, 'user_id': 1, 'username': 'admin'})
-    return jsonify({'success': False, 'error': 'Invalid credentials'}), 401
+    try:
+        data = request.json or {}
+        username = data.get('username', '')
+        password = data.get('password', '')
+        
+        if username == 'admin' and password == 'friday':
+            return jsonify({'success': True, 'user_id': 1, 'username': 'admin'})
+        return jsonify({'success': False, 'error': 'Invalid credentials'}), 401
+    except Exception as e:
+        logger.error(f"Login error: {e}")
+        return jsonify({'error': str(e)}), 500
 
 @app.route('/api/me', methods=['GET'])
 def get_me():
@@ -84,13 +108,13 @@ def get_me():
 
 @app.route('/api/chat', methods=['POST'])
 def chat():
-    data = request.json
-    message = data.get('message', '')
-    
-    if not message:
-        return jsonify({'error': 'No message'}), 400
-    
     try:
+        data = request.json or {}
+        message = data.get('message', '')
+        
+        if not message:
+            return jsonify({'error': 'No message'}), 400
+        
         reply = None
         
         # Try NVIDIA API first if key is available
@@ -112,7 +136,7 @@ def chat():
                     reply = result.get('choices', [{}])[0].get('message', {}).get('content', 'No response')
                     logger.info("Using NVIDIA API")
             except Exception as nvidia_error:
-                logger.warning(f"NVIDIA API error: {nvidia_error}, falling back to Ollama")
+                logger.warning(f"NVIDIA API error: {nvidia_error}")
         
         # Fall back to Ollama if NVIDIA failed or no key
         if not reply:
@@ -145,49 +169,119 @@ def chat():
 
 @app.route('/api/messages', methods=['GET'])
 def get_messages():
-    db = get_db()
-    messages = db.execute('SELECT * FROM messages WHERE user_id = ? ORDER BY timestamp', (1,)).fetchall()
-    return jsonify([dict(m) for m in messages])
-
-# ==================== KNOWLEDGE ====================
-
-@app.route('/api/knowledge', methods=['GET'])
-def get_knowledge():
-    db = get_db()
-    knowledge = db.execute('SELECT * FROM knowledge WHERE user_id = ? ORDER BY timestamp DESC', (1,)).fetchall()
-    return jsonify([dict(k) for k in knowledge])
-
-@app.route('/api/knowledge', methods=['POST'])
-def add_knowledge():
-    data = request.json
-    fact = data.get('fact', '')
-    
-    if fact:
+    try:
         db = get_db()
-        db.execute('INSERT INTO knowledge (user_id, fact) VALUES (?, ?)', (1, fact))
-        db.commit()
-        return jsonify({'success': True})
-    return jsonify({'error': 'No fact'}), 400
+        messages = db.execute('SELECT * FROM messages WHERE user_id = ? ORDER BY timestamp', (1,)).fetchall()
+        return jsonify([dict(m) for m in messages])
+    except Exception as e:
+        logger.error(f"Get messages error: {e}")
+        return jsonify({'error': str(e)}), 500
+
+# ==================== AGENTS ====================
+
+@app.route('/api/agents', methods=['GET'])
+def get_agents():
+    try:
+        db = get_db()
+        agents = db.execute('SELECT * FROM agents WHERE user_id = ?', (1,)).fetchall()
+        return jsonify([dict(a) for a in agents])
+    except Exception as e:
+        logger.error(f"Get agents error: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/agent/<name>', methods=['GET'])
+def get_agent(name):
+    try:
+        db = get_db()
+        agent = db.execute('SELECT * FROM agents WHERE user_id = ? AND name = ?', (1, name)).fetchone()
+        if agent:
+            return jsonify(dict(agent))
+        return jsonify({'error': 'Agent not found'}), 404
+    except Exception as e:
+        logger.error(f"Get agent error: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/agent/<name>/toggle', methods=['POST'])
+def toggle_agent(name):
+    try:
+        db = get_db()
+        agent = db.execute('SELECT * FROM agents WHERE user_id = ? AND name = ?', (1, name)).fetchone()
+        if agent:
+            new_status = 0 if agent['enabled'] else 1
+            db.execute('UPDATE agents SET enabled = ? WHERE user_id = ? AND name = ?', (new_status, 1, name))
+            db.commit()
+            return jsonify({'success': True, 'enabled': new_status})
+        return jsonify({'error': 'Agent not found'}), 404
+    except Exception as e:
+        logger.error(f"Toggle agent error: {e}")
+        return jsonify({'error': str(e)}), 500
+
+# ==================== MEMORY ====================
+
+@app.route('/api/memory', methods=['GET'])
+def get_memory():
+    try:
+        db = get_db()
+        knowledge = db.execute('SELECT * FROM knowledge WHERE user_id = ? ORDER BY timestamp DESC LIMIT 50', (1,)).fetchall()
+        return jsonify([dict(k) for k in knowledge])
+    except Exception as e:
+        logger.error(f"Get memory error: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/memory', methods=['POST'])
+def add_memory():
+    try:
+        data = request.json or {}
+        fact = data.get('fact', '')
+        
+        if fact:
+            db = get_db()
+            db.execute('INSERT INTO knowledge (user_id, fact) VALUES (?, ?)', (1, fact))
+            db.commit()
+            return jsonify({'success': True})
+        return jsonify({'error': 'No fact'}), 400
+    except Exception as e:
+        logger.error(f"Add memory error: {e}")
+        return jsonify({'error': str(e)}), 500
+
+# ==================== ACTIVITY ====================
+
+@app.route('/api/activity', methods=['GET'])
+def get_activity():
+    try:
+        return jsonify({
+            'recent': [
+                {'agent': 'system', 'action': 'initialized', 'time': datetime.now().isoformat()},
+                {'agent': 'learning', 'action': 'scanning web', 'time': datetime.now().isoformat()},
+            ]
+        })
+    except Exception as e:
+        logger.error(f"Get activity error: {e}")
+        return jsonify({'error': str(e)}), 500
 
 # ==================== STATUS ====================
 
 @app.route('/api/status', methods=['GET'])
 def get_status():
-    status = {'ollama': 'offline', 'nvidia': 'offline', 'models': 0}
-    
     try:
-        response = requests.get(f'{OLLAMA_URL}/api/tags', timeout=5)
-        if response.status_code == 200:
-            models = response.json().get('models', [])
-            status['ollama'] = 'online' if models else 'offline'
-            status['models'] = len(models)
-    except:
-        pass
-    
-    if NVIDIA_API_KEY:
-        status['nvidia'] = 'online'
-    
-    return jsonify(status)
+        status = {'ollama': 'offline', 'nvidia': 'offline', 'models': 0}
+        
+        try:
+            response = requests.get(f'{OLLAMA_URL}/api/tags', timeout=5)
+            if response.status_code == 200:
+                models = response.json().get('models', [])
+                status['ollama'] = 'online' if models else 'offline'
+                status['models'] = len(models)
+        except:
+            pass
+        
+        if NVIDIA_API_KEY:
+            status['nvidia'] = 'online'
+        
+        return jsonify(status)
+    except Exception as e:
+        logger.error(f"Get status error: {e}")
+        return jsonify({'error': str(e)}), 500
 
 # ==================== STATIC ====================
 
